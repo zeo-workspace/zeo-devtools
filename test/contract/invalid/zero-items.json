@@ -1,0 +1,8 @@
+{
+  "$expect": "bad_request",
+  "v": 1,
+  "project_root": "/__ROOT__",
+  "page_url": "http://localhost:5173/",
+  "items": [],
+  "screenshot": null
+}

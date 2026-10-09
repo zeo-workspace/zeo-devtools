@@ -1,0 +1,618 @@
+{
+  "$expect": "bad_request",
+  "v": 1,
+  "project_root": "/__ROOT__",
+  "page_url": "http://localhost:5173/",
+  "items": [
+    {
+      "src": {
+        "file": "/__ROOT__/src/F0.tsx",
+        "line": 1,
+        "column": 7,
+        "end_line": 3
+      },
+      "component": "Toolbar",
+      "dom": {
+        "tag": "button",
+        "id": "save",
+        "classes": ["btn", "btn-primary"],
+        "text": "Save draft",
+        "attrs": {
+          "role": "button",
+          "aria-label": "Save"
+        },
+        "styles": {
+          "padding": "8px 12px",
+          "color": "rgb(255, 255, 255)"
+        },
+        "rect": {
+          "x": 10,
+          "y": 20,
+          "w": 120,
+          "h": 32
+        }
+      }
+    },
+    {
+      "src": {
+        "file": "/__ROOT__/src/F1.tsx",
+        "line": 2,
+        "column": 7,
+        "end_line": 4
+      },
+      "component": "Toolbar",
+      "dom": {
+        "tag": "button",
+        "id": "save",
+        "classes": ["btn", "btn-primary"],
+        "text": "Save draft",
+        "attrs": {
+          "role": "button",
+          "aria-label": "Save"
+        },
+        "styles": {
+          "padding": "8px 12px",
+          "color": "rgb(255, 255, 255)"
+        },
+        "rect": {
+          "x": 10,
+          "y": 20,
+          "w": 120,
+          "h": 32
+        }
+      }
+    },
+    {
+      "src": {
+        "file": "/__ROOT__/src/F2.tsx",
+        "line": 3,
+        "column": 7,
+        "end_line": 5
+      },
+      "component": "Toolbar",
+      "dom": {
+        "tag": "button",
+        "id": "save",
+        "classes": ["btn", "btn-primary"],
+        "text": "Save draft",
+        "attrs": {
+          "role": "button",
+          "aria-label": "Save"
+        },
+        "styles": {
+          "padding": "8px 12px",
+          "color": "rgb(255, 255, 255)"
+        },
+        "rect": {
+          "x": 10,
+          "y": 20,
+          "w": 120,
+          "h": 32
+        }
+      }
+    },
+    {
+      "src": {
+        "file": "/__ROOT__/src/F3.tsx",
+        "line": 4,
+        "column": 7,
+        "end_line": 6
+      },
+      "component": "Toolbar",
+      "dom": {
+        "tag": "button",
+        "id": "save",
+        "classes": ["btn", "btn-primary"],
+        "text": "Save draft",
+        "attrs": {
+          "role": "button",
+          "aria-label": "Save"
+        },
+        "styles": {
+          "padding": "8px 12px",
+          "color": "rgb(255, 255, 255)"
+        },
+        "rect": {
+          "x": 10,
+          "y": 20,
+          "w": 120,
+          "h": 32
+        }
+      }
+    },
+    {
+      "src": {
+        "file": "/__ROOT__/src/F4.tsx",
+        "line": 5,
+        "column": 7,
+        "end_line": 7
+      },
+      "component": "Toolbar",
+      "dom": {
+        "tag": "button",
+        "id": "save",
+        "classes": ["btn", "btn-primary"],
+        "text": "Save draft",
+        "attrs": {
+          "role": "button",
+          "aria-label": "Save"
+        },
+        "styles": {
+          "padding": "8px 12px",
+          "color": "rgb(255, 255, 255)"
+        },
+        "rect": {
+          "x": 10,
+          "y": 20,
+          "w": 120,
+          "h": 32
+        }
+      }
+    },
+    {
+      "src": {
+        "file": "/__ROOT__/src/F5.tsx",
+        "line": 6,
+        "column": 7,
+        "end_line": 8
+      },
+      "component": "Toolbar",
+      "dom": {
+        "tag": "button",
+        "id": "save",
+        "classes": ["btn", "btn-primary"],
+        "text": "Save draft",
+        "attrs": {
+          "role": "button",
+          "aria-label": "Save"
+        },
+        "styles": {
+          "padding": "8px 12px",
+          "color": "rgb(255, 255, 255)"
+        },
+        "rect": {
+          "x": 10,
+          "y": 20,
+          "w": 120,
+          "h": 32
+        }
+      }
+    },
+    {
+      "src": {
+        "file": "/__ROOT__/src/F6.tsx",
+        "line": 7,
+        "column": 7,
+        "end_line": 9
+      },
+      "component": "Toolbar",
+      "dom": {
+        "tag": "button",
+        "id": "save",
+        "classes": ["btn", "btn-primary"],
+        "text": "Save draft",
+        "attrs": {
+          "role": "button",
+          "aria-label": "Save"
+        },
+        "styles": {
+          "padding": "8px 12px",
+          "color": "rgb(255, 255, 255)"
+        },
+        "rect": {
+          "x": 10,
+          "y": 20,
+          "w": 120,
+          "h": 32
+        }
+      }
+    },
+    {
+      "src": {
+        "file": "/__ROOT__/src/F7.tsx",
+        "line": 8,
+        "column": 7,
+        "end_line": 10
+      },
+      "component": "Toolbar",
+      "dom": {
+        "tag": "button",
+        "id": "save",
+        "classes": ["btn", "btn-primary"],
+        "text": "Save draft",
+        "attrs": {
+          "role": "button",
+          "aria-label": "Save"
+        },
+        "styles": {
+          "padding": "8px 12px",
+          "color": "rgb(255, 255, 255)"
+        },
+        "rect": {
+          "x": 10,
+          "y": 20,
+          "w": 120,
+          "h": 32
+        }
+      }
+    },
+    {
+      "src": {
+        "file": "/__ROOT__/src/F8.tsx",
+        "line": 9,
+        "column": 7,
+        "end_line": 11
+      },
+      "component": "Toolbar",
+      "dom": {
+        "tag": "button",
+        "id": "save",
+        "classes": ["btn", "btn-primary"],
+        "text": "Save draft",
+        "attrs": {
+          "role": "button",
+          "aria-label": "Save"
+        },
+        "styles": {
+          "padding": "8px 12px",
+          "color": "rgb(255, 255, 255)"
+        },
+        "rect": {
+          "x": 10,
+          "y": 20,
+          "w": 120,
+          "h": 32
+        }
+      }
+    },
+    {
+      "src": {
+        "file": "/__ROOT__/src/F9.tsx",
+        "line": 10,
+        "column": 7,
+        "end_line": 12
+      },
+      "component": "Toolbar",
+      "dom": {
+        "tag": "button",
+        "id": "save",
+        "classes": ["btn", "btn-primary"],
+        "text": "Save draft",
+        "attrs": {
+          "role": "button",
+          "aria-label": "Save"
+        },
+        "styles": {
+          "padding": "8px 12px",
+          "color": "rgb(255, 255, 255)"
+        },
+        "rect": {
+          "x": 10,
+          "y": 20,
+          "w": 120,
+          "h": 32
+        }
+      }
+    },
+    {
+      "src": {
+        "file": "/__ROOT__/src/F10.tsx",
+        "line": 11,
+        "column": 7,
+        "end_line": 13
+      },
+      "component": "Toolbar",
+      "dom": {
+        "tag": "button",
+        "id": "save",
+        "classes": ["btn", "btn-primary"],
+        "text": "Save draft",
+        "attrs": {
+          "role": "button",
+          "aria-label": "Save"
+        },
+        "styles": {
+          "padding": "8px 12px",
+          "color": "rgb(255, 255, 255)"
+        },
+        "rect": {
+          "x": 10,
+          "y": 20,
+          "w": 120,
+          "h": 32
+        }
+      }
+    },
+    {
+      "src": {
+        "file": "/__ROOT__/src/F11.tsx",
+        "line": 12,
+        "column": 7,
+        "end_line": 14
+      },
+      "component": "Toolbar",
+      "dom": {
+        "tag": "button",
+        "id": "save",
+        "classes": ["btn", "btn-primary"],
+        "text": "Save draft",
+        "attrs": {
+          "role": "button",
+          "aria-label": "Save"
+        },
+        "styles": {
+          "padding": "8px 12px",
+          "color": "rgb(255, 255, 255)"
+        },
+        "rect": {
+          "x": 10,
+          "y": 20,
+          "w": 120,
+          "h": 32
+        }
+      }
+    },
+    {
+      "src": {
+        "file": "/__ROOT__/src/F12.tsx",
+        "line": 13,
+        "column": 7,
+        "end_line": 15
+      },
+      "component": "Toolbar",
+      "dom": {
+        "tag": "button",
+        "id": "save",
+        "classes": ["btn", "btn-primary"],
+        "text": "Save draft",
+        "attrs": {
+          "role": "button",
+          "aria-label": "Save"
+        },
+        "styles": {
+          "padding": "8px 12px",
+          "color": "rgb(255, 255, 255)"
+        },
+        "rect": {
+          "x": 10,
+          "y": 20,
+          "w": 120,
+          "h": 32
+        }
+      }
+    },
+    {
+      "src": {
+        "file": "/__ROOT__/src/F13.tsx",
+        "line": 14,
+        "column": 7,
+        "end_line": 16
+      },
+      "component": "Toolbar",
+      "dom": {
+        "tag": "button",
+        "id": "save",
+        "classes": ["btn", "btn-primary"],
+        "text": "Save draft",
+        "attrs": {
+          "role": "button",
+          "aria-label": "Save"
+        },
+        "styles": {
+          "padding": "8px 12px",
+          "color": "rgb(255, 255, 255)"
+        },
+        "rect": {
+          "x": 10,
+          "y": 20,
+          "w": 120,
+          "h": 32
+        }
+      }
+    },
+    {
+      "src": {
+        "file": "/__ROOT__/src/F14.tsx",
+        "line": 15,
+        "column": 7,
+        "end_line": 17
+      },
+      "component": "Toolbar",
+      "dom": {
+        "tag": "button",
+        "id": "save",
+        "classes": ["btn", "btn-primary"],
+        "text": "Save draft",
+        "attrs": {
+          "role": "button",
+          "aria-label": "Save"
+        },
+        "styles": {
+          "padding": "8px 12px",
+          "color": "rgb(255, 255, 255)"
+        },
+        "rect": {
+          "x": 10,
+          "y": 20,
+          "w": 120,
+          "h": 32
+        }
+      }
+    },
+    {
+      "src": {
+        "file": "/__ROOT__/src/F15.tsx",
+        "line": 16,
+        "column": 7,
+        "end_line": 18
+      },
+      "component": "Toolbar",
+      "dom": {
+        "tag": "button",
+        "id": "save",
+        "classes": ["btn", "btn-primary"],
+        "text": "Save draft",
+        "attrs": {
+          "role": "button",
+          "aria-label": "Save"
+        },
+        "styles": {
+          "padding": "8px 12px",
+          "color": "rgb(255, 255, 255)"
+        },
+        "rect": {
+          "x": 10,
+          "y": 20,
+          "w": 120,
+          "h": 32
+        }
+      }
+    },
+    {
+      "src": {
+        "file": "/__ROOT__/src/F16.tsx",
+        "line": 17,
+        "column": 7,
+        "end_line": 19
+      },
+      "component": "Toolbar",
+      "dom": {
+        "tag": "button",
+        "id": "save",
+        "classes": ["btn", "btn-primary"],
+        "text": "Save draft",
+        "attrs": {
+          "role": "button",
+          "aria-label": "Save"
+        },
+        "styles": {
+          "padding": "8px 12px",
+          "color": "rgb(255, 255, 255)"
+        },
+        "rect": {
+          "x": 10,
+          "y": 20,
+          "w": 120,
+          "h": 32
+        }
+      }
+    },
+    {
+      "src": {
+        "file": "/__ROOT__/src/F17.tsx",
+        "line": 18,
+        "column": 7,
+        "end_line": 20
+      },
+      "component": "Toolbar",
+      "dom": {
+        "tag": "button",
+        "id": "save",
+        "classes": ["btn", "btn-primary"],
+        "text": "Save draft",
+        "attrs": {
+          "role": "button",
+          "aria-label": "Save"
+        },
+        "styles": {
+          "padding": "8px 12px",
+          "color": "rgb(255, 255, 255)"
+        },
+        "rect": {
+          "x": 10,
+          "y": 20,
+          "w": 120,
+          "h": 32
+        }
+      }
+    },
+    {
+      "src": {
+        "file": "/__ROOT__/src/F18.tsx",
+        "line": 19,
+        "column": 7,
+        "end_line": 21
+      },
+      "component": "Toolbar",
+      "dom": {
+        "tag": "button",
+        "id": "save",
+        "classes": ["btn", "btn-primary"],
+        "text": "Save draft",
+        "attrs": {
+          "role": "button",
+          "aria-label": "Save"
+        },
+        "styles": {
+          "padding": "8px 12px",
+          "color": "rgb(255, 255, 255)"
+        },
+        "rect": {
+          "x": 10,
+          "y": 20,
+          "w": 120,
+          "h": 32
+        }
+      }
+    },
+    {
+      "src": {
+        "file": "/__ROOT__/src/F19.tsx",
+        "line": 20,
+        "column": 7,
+        "end_line": 22
+      },
+      "component": "Toolbar",
+      "dom": {
+        "tag": "button",
+        "id": "save",
+        "classes": ["btn", "btn-primary"],
+        "text": "Save draft",
+        "attrs": {
+          "role": "button",
+          "aria-label": "Save"
+        },
+        "styles": {
+          "padding": "8px 12px",
+          "color": "rgb(255, 255, 255)"
+        },
+        "rect": {
+          "x": 10,
+          "y": 20,
+          "w": 120,
+          "h": 32
+        }
+      }
+    },
+    {
+      "src": {
+        "file": "/__ROOT__/src/F20.tsx",
+        "line": 21,
+        "column": 7,
+        "end_line": 23
+      },
+      "component": "Toolbar",
+      "dom": {
+        "tag": "button",
+        "id": "save",
+        "classes": ["btn", "btn-primary"],
+        "text": "Save draft",
+        "attrs": {
+          "role": "button",
+          "aria-label": "Save"
+        },
+        "styles": {
+          "padding": "8px 12px",
+          "color": "rgb(255, 255, 255)"
+        },
+        "rect": {
+          "x": 10,
+          "y": 20,
+          "w": 120,
+          "h": 32
+        }
+      }
+    }
+  ],
+  "screenshot": null
+}

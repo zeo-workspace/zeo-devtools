@@ -1,0 +1,72 @@
+{
+  "$expect": "bad_request",
+  "v": 1,
+  "project_root": "/__ROOT__",
+  "page_url": "http://localhost:5173/",
+  "items": [
+    {
+      "src": {
+        "file": "/__ROOT__/src/Toolbar.tsx",
+        "line": 12,
+        "column": 7,
+        "end_line": 14
+      },
+      "component": "Toolbar",
+      "dom": {
+        "tag": "button",
+        "id": "save",
+        "classes": [
+          "c",
+          "c",
+          "c",
+          "c",
+          "c",
+          "c",
+          "c",
+          "c",
+          "c",
+          "c",
+          "c",
+          "c",
+          "c",
+          "c",
+          "c",
+          "c",
+          "c",
+          "c",
+          "c",
+          "c",
+          "c",
+          "c",
+          "c",
+          "c",
+          "c",
+          "c",
+          "c",
+          "c",
+          "c",
+          "c",
+          "c",
+          "c",
+          "c"
+        ],
+        "text": "Save draft",
+        "attrs": {
+          "role": "button",
+          "aria-label": "Save"
+        },
+        "styles": {
+          "padding": "8px 12px",
+          "color": "rgb(255, 255, 255)"
+        },
+        "rect": {
+          "x": 10,
+          "y": 20,
+          "w": 120,
+          "h": 32
+        }
+      }
+    }
+  ],
+  "screenshot": null
+}
