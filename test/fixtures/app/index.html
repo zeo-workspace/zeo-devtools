@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>zeo-devtools fixture</title>
+    <style>
+      body { margin: 0; font-family: sans-serif; }
+      #save { padding: 6px 12px; background-color: rgb(10, 20, 30); color: white; }
+      .card { display: inline-block; width: 200px; margin: 8px; padding: 8px; border: 1px solid #999; }
+      #wide { display: block; width: 100vw; height: 240px; background: rgb(200, 220, 240); }
+    </style>
+  </head>
+  <body>
+    <!-- Static markup outside JSX: it has no data-zeo-src and no tagged ancestor (R3.6). -->
+    <div id="static-banner">Static banner from index.html</div>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
