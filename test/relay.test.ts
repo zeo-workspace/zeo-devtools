@@ -228,7 +228,9 @@ describe("forwarding (R6.1)", () => {
   it("reaches $ZEO_DEVTOOLS_SOCKET when no socketPath option is given", async () => {
     const zeoFake = await fake();
     vi.stubEnv("ZEO_DEVTOOLS_SOCKET", zeoFake.path);
-    cleanups.push(async () => vi.unstubAllEnvs());
+    cleanups.push(async () => {
+      vi.unstubAllEnvs();
+    });
     const s = await stack(zeo());
     const page = await Hmr.open(s);
     expect(await select(page, pageSelection())).toEqual(okInserted(1));
@@ -242,7 +244,9 @@ describe("forwarding (R6.1)", () => {
     const zeoFake = await fake(join(runtime, "zeo", "devtools.sock"));
     vi.stubEnv("ZEO_DEVTOOLS_SOCKET", undefined);
     vi.stubEnv("XDG_RUNTIME_DIR", runtime);
-    cleanups.push(async () => vi.unstubAllEnvs());
+    cleanups.push(async () => {
+      vi.unstubAllEnvs();
+    });
     const s = await stack(zeo());
     const page = await Hmr.open(s);
     expect(await select(page, pageSelection())).toEqual(okInserted(1));
@@ -252,7 +256,9 @@ describe("forwarding (R6.1)", () => {
   it("a relative $XDG_RUNTIME_DIR is refused with a message naming it", async () => {
     vi.stubEnv("ZEO_DEVTOOLS_SOCKET", undefined);
     vi.stubEnv("XDG_RUNTIME_DIR", "relative/runtime");
-    cleanups.push(async () => vi.unstubAllEnvs());
+    cleanups.push(async () => {
+      vi.unstubAllEnvs();
+    });
     const s = await stack(zeo());
     const page = await Hmr.open(s);
     const result = await select(page, pageSelection());
