@@ -18,6 +18,7 @@ import {
   MAX_ITEMS,
   STYLE_KEYS,
   devtoolsResult,
+  parseSelection,
   selectionFromPage,
   selectionToZeo,
 } from "../src/contract.js";
@@ -328,5 +329,61 @@ describe("selectionToZeo path confinement (R8.4, agreed with the Rust validator)
   it("hostile converse: a file anywhere under project_root is accepted", () => {
     accepts(selectionToZeo, toZeo({}, [item("/home/dev/app/src/deep/nested/Card.tsx")]));
     accepts(selectionToZeo, toZeo({}, [item("/home/dev/app/src/../src/Toolbar.tsx")]));
+  });
+});
+
+// Story 033, task 9.1 — the relay answers the code Zeo answers (fixes from the 6.2 tech review).
+describe("parseSelection answers in Zeo's order: version, field limits, confinement", () => {
+  const code = (input: unknown) => {
+    const r = parseSelection(selectionToZeo, input);
+    return r.ok ? "accepted" : r.error;
+  };
+  it("a relative src.file on the socket form is bad_request, never outside_project", () => {
+    expect(code(toZeo({}, [item("src/Toolbar.tsx")]))).toBe("bad_request");
+  });
+  it("a field limit on one item beats confinement on another", () => {
+    const broken = item("/home/dev/app/src/Toolbar.tsx", { component: "c".repeat(129) });
+    expect(code(toZeo({}, [broken, item("/etc/passwd")]))).toBe("bad_request");
+    expect(code(toZeo({ page_url: "u".repeat(2049) }, [item("/etc/passwd")]))).toBe("bad_request");
+  });
+  it("outside_project when it is the only kind of issue, and the version beats it", () => {
+    expect(code(toZeo({}, [item("/etc/passwd")]))).toBe("outside_project");
+    expect(code(toZeo({ v: 2 }, [item("/etc/passwd")]))).toBe("unsupported_version");
+  });
+  it("the bad_request message names the field limit, not the confinement issue", () => {
+    const r = parseSelection(
+      selectionToZeo,
+      toZeo({}, [item("/etc/passwd"), item("/home/dev/app/a.tsx", { component: "c".repeat(129) })]),
+    );
+    expect(r).toMatchObject({ ok: false, error: "bad_request" });
+    expect(r.ok ? "" : r.message).toContain("items.1.component");
+  });
+});
+
+describe("a lone UTF-16 surrogate is refused as bad_request, as serde_json refuses it", () => {
+  const lone = "a\uD800b";
+  const cases: Array<[string, Json]> = [
+    ["dom.text", toZeo({}, [item("/home/dev/app/a.tsx", { dom: dom({ text: lone }) })])],
+    ["dom.id", toZeo({}, [item("/home/dev/app/a.tsx", { dom: dom({ id: lone }) })])],
+    ["dom.classes", toZeo({}, [item("/home/dev/app/a.tsx", { dom: dom({ classes: [lone] }) })])],
+    [
+      "dom.attrs value",
+      toZeo({}, [item("/home/dev/app/a.tsx", { dom: dom({ attrs: { "aria-label": "\uDC00" } }) })]),
+    ],
+    ["component", toZeo({}, [item("/home/dev/app/a.tsx", { component: lone })])],
+    ["page_url", toZeo({ page_url: lone })],
+    ["src.file", toZeo({}, [item(`/home/dev/app/${lone}.tsx`)])],
+  ];
+  for (const [field, input] of cases) {
+    it(field, () => {
+      expect(parseSelection(selectionToZeo, input)).toMatchObject({
+        ok: false,
+        error: "bad_request",
+      });
+    });
+  }
+  it("the page form refuses it too, and a well-formed pair is accepted", () => {
+    refuses(selectionFromPage, fromPage({}, [item("src/a.tsx", { dom: dom({ text: lone }) })]));
+    accepts(selectionFromPage, fromPage({}, [item("src/a.tsx", { dom: dom({ text: "a😀b" }) })]));
   });
 });

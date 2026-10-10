@@ -195,7 +195,8 @@ export function mount(options: ClientOptions = {}): void {
     button.setAttribute("aria-pressed", String(state.mode === "picking"));
     const pending = state.mode === "picking" ? state.pending : [];
     send.hidden = pending.length === 0;
-    send.textContent = `Send ${pending.length}`;
+    // The count is its own token, "(2)", so it reads as a number next to any other control.
+    send.textContent = `Send (${pending.length})`;
     stop.hidden = !capture.isLive;
     marks.replaceChildren();
     for (const node of pending) {

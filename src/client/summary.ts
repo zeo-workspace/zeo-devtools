@@ -10,7 +10,11 @@ const TEXT_MAX_CHARS = 500;
 const SKIPPED = new Set(["input", "textarea", "select", "option", "script", "style", "template"]);
 
 const utf8Bytes = (value: unknown) => new TextEncoder().encode(JSON.stringify(value)).length;
-const cutChars = (text: string, max: number) => [...text].slice(0, max).join("");
+/**
+ * Cuts by code points after replacing any lone UTF-16 surrogate (the DOM allows them) with
+ * U+FFFD: serde_json refuses a lone surrogate, so Zeo would answer `bad_request`.
+ */
+const cutChars = (text: string, max: number) => [...text.toWellFormed()].slice(0, max).join("");
 
 /** The element's text, skipping form-control subtrees even when an ancestor is picked. */
 function visibleText(el: Element): string {

@@ -149,6 +149,27 @@ describe("TabCapture.start (R5.1, R5.6)", () => {
     expect(cap.isLive).toBe(false);
   });
 
+  it("hostile: NotSupportedError resolves `unsupported`, not `refused`, and is not asked again", async () => {
+    const gdm = stubDisplayMedia(() =>
+      Promise.reject(Object.assign(new Error("Not supported"), { name: "NotSupportedError" })),
+    );
+    const cap = new TabCapture();
+    expect(reasonOf(await cap.start())).toBe("unsupported");
+    expect(reasonOf(await cap.start())).toBe("unsupported");
+    expect(gdm).toHaveBeenCalledTimes(1);
+    expect(cap.isLive).toBe(false);
+  });
+
+  it("a browser that cannot report displaySurface is never asked (Firefox)", async () => {
+    const getDisplayMedia = vi.fn(() => Promise.resolve(streamOf(track(undefined))));
+    vi.stubGlobal("navigator", {
+      mediaDevices: { getDisplayMedia, getSupportedConstraints: () => ({ width: true }) },
+    });
+    const cap = new TabCapture();
+    expect(reasonOf(await cap.start())).toBe("unsupported");
+    expect(getDisplayMedia).not.toHaveBeenCalled();
+  });
+
   it("a browser without getDisplayMedia resolves `unsupported` and never throws", async () => {
     vi.stubGlobal("navigator", { mediaDevices: undefined });
     const cap = new TabCapture();

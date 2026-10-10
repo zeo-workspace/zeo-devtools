@@ -25,6 +25,22 @@ describe("summary review regressions", () => {
     expect(sendable(s)).toBe(true);
   });
 
+  it("replaces lone surrogates from the DOM, so the summary stays sendable (task 9.1)", () => {
+    const div = document.createElement("div");
+    div.id = "a\uD800b";
+    div.className = "\uDC00c";
+    div.setAttribute("aria-label", "x\uDFFF");
+    div.textContent = "hi \uD83D there";
+    document.body.replaceChildren(div);
+    const s = summarize(div, window);
+    expect(
+      [s.id!, s.classes[0]!, s.attrs["aria-label"]!, s.text].every((v) => v.isWellFormed()),
+    ).toBe(true);
+    expect(s.id).toBe("a\uFFFDb");
+    expect(s.text).toBe("hi \uFFFD there");
+    expect(sendable(s)).toBe(true);
+  });
+
   it("never cuts an id or a class inside a surrogate pair", () => {
     const div = document.createElement("div");
     div.id = `${"a".repeat(127)}😀`;

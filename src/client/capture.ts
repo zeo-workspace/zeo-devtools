@@ -67,6 +67,23 @@ function cleanFrame(video: HTMLVideoElement): Promise<boolean> {
   });
 }
 
+/** Starts the video, or gives up after `FRAME_WAIT_MS`; never rejects. */
+function playing(video: HTMLVideoElement): Promise<boolean> {
+  return new Promise<boolean>((resolve) => {
+    const timer = setTimeout(() => resolve(false), FRAME_WAIT_MS);
+    video.play().then(
+      () => {
+        clearTimeout(timer);
+        resolve(true);
+      },
+      () => {
+        clearTimeout(timer);
+        resolve(false);
+      },
+    );
+  });
+}
+
 interface RegionCaptureTrack extends MediaStreamTrack {
   cropTo?: (target: unknown) => Promise<void>;
 }
@@ -120,6 +137,16 @@ export class TabCapture {
     if (this.#unsupported || typeof media?.getDisplayMedia !== "function") {
       return Promise.resolve({ ok: false, reason: "unsupported" });
     }
+    // A browser that cannot report the shared surface (Firefox) can never pass the surface
+    // check below, so it is not asked at all: its window/screen prompt would only lead to the
+    // no-image path, and a prompt nobody answers would hold the send forever.
+    if (
+      typeof media.getSupportedConstraints === "function" &&
+      media.getSupportedConstraints().displaySurface !== true
+    ) {
+      this.#unsupported = true;
+      return Promise.resolve({ ok: false, reason: "unsupported" });
+    }
     let request: Promise<MediaStream>;
     try {
       request = media.getDisplayMedia({
@@ -159,7 +186,15 @@ export class TabCapture {
         this.#stream = stream;
         return { ok: true };
       },
-      (): StartResult => ({ ok: false, reason: "refused" }),
+      (error: unknown): StartResult => {
+        // NotSupportedError is the browser saying it cannot capture at all (e.g. a headless
+        // build), not the user saying no: remembered, so later sends do not ask again.
+        if (error instanceof Error && error.name === "NotSupportedError") {
+          this.#unsupported = true;
+          return { ok: false, reason: "unsupported" };
+        }
+        return { ok: false, reason: "refused" };
+      },
     );
     this.#starting = starting;
     void starting.finally(() => {
@@ -182,8 +217,10 @@ export class TabCapture {
     hideOverlay(true);
     try {
       const video = this.#videoFor(stream);
-      if (video.readyState < 2) {
-        await video.play();
+      // Bounded like the frame wait: sends are queued one at a time, so a stream that never
+      // starts playing would otherwise hold every later send too.
+      if (video.readyState < 2 && !(await playing(video))) {
+        return { ok: false, reason: "grab_failed" };
       }
       if (!(await cleanFrame(video))) {
         return { ok: false, reason: "grab_failed" };

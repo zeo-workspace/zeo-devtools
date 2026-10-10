@@ -58,18 +58,25 @@ export type DevtoolsError = (typeof DEVTOOLS_ERRORS)[number];
 const utf8Bytes = (value: unknown): number =>
   new TextEncoder().encode(JSON.stringify(value)).length;
 
+/**
+ * A string Zeo can decode: no lone UTF-16 surrogate. `JSON.stringify` writes one as a `\uD800`
+ * escape, which serde_json refuses, so Zeo would answer the whole request `bad_request`.
+ */
+const text = () =>
+  z.string().refine((s) => s.isWellFormed(), { message: "contains a lone UTF-16 surrogate" });
+
 /** Code points, not UTF-16 units: Zeo counts Rust `char`s, and both sides must agree. */
 const maxChars = (max: number) =>
-  z.string().refine((s) => [...s].length <= max, { message: `longer than ${max} characters` });
+  text().refine((s) => [...s].length <= max, { message: `longer than ${max} characters` });
 
 const domSummary = z
   .strictObject({
-    tag: z.string().min(1).max(64),
-    id: z.string().max(128).nullable(),
-    classes: z.array(z.string().max(128)).max(32),
+    tag: text().min(1).max(64),
+    id: text().max(128).nullable(),
+    classes: z.array(text().max(128)).max(32),
     text: maxChars(500),
-    attrs: z.record(z.string().regex(ATTR_ALLOWLIST), z.string().max(200)),
-    styles: z.partialRecord(z.enum(STYLE_KEYS), z.string().max(200)),
+    attrs: z.record(z.string().regex(ATTR_ALLOWLIST), text().max(200)),
+    styles: z.partialRecord(z.enum(STYLE_KEYS), text().max(200)),
     rect: z.strictObject({ x: z.number(), y: z.number(), w: z.number(), h: z.number() }),
   })
   .refine((dom) => utf8Bytes(dom) <= DOM_SUMMARY_MAX_BYTES, {
@@ -79,13 +86,11 @@ export type DomSummary = z.infer<typeof domSummary>;
 
 const position = { line: z.int().min(1), column: z.int().min(1), end_line: z.int().min(1) };
 
-const relativeFile = z
-  .string()
+const relativeFile = text()
   .min(1)
   .max(4096)
   .refine((f) => !f.startsWith("/"), { message: "a page path must be project-relative" });
-const absoluteFile = z
-  .string()
+const absoluteFile = text()
   .min(2)
   .max(4096)
   .refine((f) => f.startsWith("/"), { message: "a socket path must be absolute" });
@@ -93,7 +98,7 @@ const absoluteFile = z
 const item = (file: z.ZodType<string>) =>
   z.strictObject({
     src: z.strictObject({ file, ...position }),
-    component: z.string().max(128).nullable(),
+    component: text().max(128).nullable(),
     dom: domSummary,
   });
 
@@ -101,8 +106,7 @@ const screenshot = z
   .strictObject({
     mime: z.literal("image/png"),
     // 4 MiB decoded is at most 4/3 of that in base64.
-    data_b64: z
-      .string()
+    data_b64: text()
       .min(1)
       .max(Math.ceil(SCREENSHOT_MAX_BYTES / 3) * 4),
     w: z.int().min(1).max(SCREENSHOT_MAX_EDGE),
@@ -112,7 +116,7 @@ const screenshot = z
 
 const common = {
   v: z.literal(1),
-  page_url: z.string().max(2048),
+  page_url: text().max(2048),
   screenshot,
 };
 
@@ -157,7 +161,9 @@ export const selectionToZeo = z
   })
   .superRefine((req, ctx) => {
     req.items.forEach((it, index) => {
-      if (!isUnder(it.src.file, req.project_root)) {
+      // A relative path is already a `bad_request` issue (`absoluteFile`), never a confinement
+      // one: `normalizePosix` would read `src/a.tsx` as `/src/a.tsx` and call it outside.
+      if (it.src.file.startsWith("/") && !isUnder(it.src.file, req.project_root)) {
         ctx.addIssue({
           code: "custom",
           path: ["items", index, "src", "file"],
@@ -194,8 +200,10 @@ export type Parsed<T> =
   { ok: true; value: T } | { ok: false; error: DevtoolsError; message: string };
 
 /**
- * Validates `input` and answers in the contract's own terms instead of throwing. The version
- * is checked first, as Zeo does, so `v: 2` is `unsupported_version` whatever else is wrong.
+ * Validates `input` and answers in the contract's own terms instead of throwing, in Zeo's order:
+ * the version first (`v: 2` is `unsupported_version` whatever else is wrong), then every field
+ * limit (`bad_request`), and only then confinement — so `outside_project` is the answer only
+ * when it is the sole kind of issue.
  */
 export function parseSelection<T>(schema: z.ZodType<T>, input: unknown): Parsed<T> {
   if (typeof input === "object" && input !== null && "v" in input && input.v !== 1) {
@@ -209,19 +217,17 @@ export function parseSelection<T>(schema: z.ZodType<T>, input: unknown): Parsed<
   if (result.success) {
     return { ok: true, value: result.data };
   }
-  const outside = result.error.issues.some(
-    (issue) =>
-      issue.code === "custom" &&
-      (issue as { params?: { devtools?: string } }).params?.devtools === OUTSIDE_PROJECT,
-  );
-  if (outside) {
+  const isOutside = (issue: z.core.$ZodIssue) =>
+    issue.code === "custom" &&
+    (issue as { params?: { devtools?: string } }).params?.devtools === OUTSIDE_PROJECT;
+  if (result.error.issues.every(isOutside)) {
     return {
       ok: false,
       error: "outside_project",
       message: "A selected file is outside this project",
     };
   }
-  const first = result.error.issues[0];
+  const first = result.error.issues.find((issue) => !isOutside(issue));
   const where = first ? first.path.join(".") || "request" : "request";
   return {
     ok: false,

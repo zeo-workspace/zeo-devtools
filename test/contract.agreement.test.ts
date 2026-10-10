@@ -5,16 +5,16 @@
 // R6.1, R8.3 (Q14).
 //
 // Each invalid file names its expected `DevtoolsError` in a top-level "$expect" key, which
-// is stripped before validating. The zod side can only ever answer `bad_request` or
-// `unsupported_version` (the other codes need the file system or Zeo), so it asserts:
-// the verdict, that "$expect" is a known code, and that every `unsupported_version` case is
-// refused on the `v` field — the version is checked first, as on the Rust side.
+// is stripped before validating. The zod side answers `unsupported_version`, `bad_request`
+// or `outside_project` (as a normalized string prefix; symlinks need the file system), so it
+// asserts: the verdict, that `parseSelection` returns the "$expect" code, and that every
+// `unsupported_version` case is refused on the `v` field — checked first, as on the Rust side.
 //
 // Non-vacuous guard first: an empty or missing fixture directory must FAIL, never pass.
 import { readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { selectionToZeo } from "../src/contract.js";
+import { parseSelection, selectionToZeo } from "../src/contract.js";
 
 const DIR = fileURLToPath(new URL("./contract/", import.meta.url));
 const ERRORS = [
@@ -53,6 +53,8 @@ describe("valid fixtures are accepted by selectionToZeo", () => {
     it(name, () => {
       const r = selectionToZeo.safeParse(body);
       expect(r.success, JSON.stringify(r.error?.issues ?? [])).toBe(true);
+      // Added by task 9.1 (oracle strengthening): the relay's own entry point accepts it too.
+      expect(parseSelection(selectionToZeo, body)).toMatchObject({ ok: true });
     });
   }
 });
@@ -67,6 +69,9 @@ describe("invalid fixtures are refused by selectionToZeo, with a known $expect",
         const paths = (r.error?.issues ?? []).map((i) => i.path.join("."));
         expect(paths).toContain("v");
       }
+      // Added by task 9.1 (oracle strengthening): refusal alone cannot tell `outside_project`
+      // from `bad_request`; the code the relay answers must be the one Zeo answers.
+      expect(parseSelection(selectionToZeo, body)).toMatchObject({ ok: false, error: expected });
     });
   }
 });

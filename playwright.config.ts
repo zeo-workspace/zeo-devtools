@@ -17,7 +17,12 @@ export default defineConfig({
       name: "chromium",
       use: {
         ...devices["Desktop Chrome"],
-        launchOptions: { args: ["--auto-accept-this-tab-capture"] },
+        // The full browser: the default chromium-headless-shell rejects getDisplayMedia.
+        channel: "chromium",
+        launchOptions: {
+          // One renderer per site: the R6.2 background tab is otherwise starved to ~3 rAF/s.
+          args: ["--auto-accept-this-tab-capture", "--process-per-site"],
+        },
       },
     },
     {
