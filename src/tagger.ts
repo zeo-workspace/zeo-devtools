@@ -36,7 +36,8 @@ interface BabelNode {
 const isNode = (value: unknown): value is BabelNode =>
   typeof value === "object" && value !== null && typeof (value as BabelNode).type === "string";
 
-const escapeAttr = (value: string) => value.replaceAll("&", "&amp;").replaceAll('"', "&quot;");
+export const escapeAttr = (value: string) =>
+  value.replaceAll("&", "&amp;").replaceAll('"', "&quot;");
 
 const isComponentName = (name: unknown): name is string =>
   typeof name === "string" && /^[A-Z]/.test(name);

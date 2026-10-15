@@ -1,0 +1,13 @@
+---
+// Multi-byte text before the elements: ç, →, an emoji. Their lines must not shift (R1.4).
+const greeting = "Olá → café ç 😀";
+const items = ["um", "dois", "três"];
+---
+<!-- ç → 😀 before the first element of the template -->
+<section id="hero">
+  <p id="accent">{greeting} · açúcar → 😀😀</p>
+  <button id="save" type="button">Save draft</button>
+  <ul id="list">
+    {items.map((item, i) => <li id={`item-${i + 1}`}>{item}</li>)}
+  </ul>
+</section>

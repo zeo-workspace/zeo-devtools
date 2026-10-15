@@ -1,0 +1,16 @@
+---
+import Base from "../layouts/Base.astro";
+import Card from "../components/Card.astro";
+import Hero from "../components/Hero.astro";
+const cards = [
+  { id: "card-a", title: "First card" },
+  { id: "card-b", title: "Second card" },
+];
+---
+<Base title="zeo-devtools Astro fixture">
+  <p id="ready">Astro fixture ready</p>
+  <Hero />
+  <section id="cards">
+    {cards.map((card) => <Card id={card.id} title={card.title} />)}
+  </section>
+</Base>

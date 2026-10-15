@@ -1,10 +1,13 @@
 // @lucascouts/vite-plugin-zeo (story 033): in `vite dev`, tag every intrinsic JSX element with
 // its source and relay picker selections to Zeo's devtools bridge. Both plugins are
-// serve-only, so `vite build` output carries nothing of either (R11.1).
+// serve-only, so `vite build` output carries nothing of either (R11.1). Story 052 adds the
+// intrinsic elements of `.astro` templates, parsed with the app's `@astrojs/compiler-rs` (the
+// copy its Astro resolves, else the app root's).
 import { existsSync } from "node:fs";
-import { dirname, resolve as resolvePath } from "node:path";
-import { fileURLToPath } from "node:url";
-import { version as viteVersion, type Plugin } from "vite";
+import { createRequire } from "node:module";
+import { dirname, join, posix, resolve as resolvePath } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { version as viteVersion, type Plugin, type ResolvedConfig } from "vite";
 import { z } from "zod";
 import {
   isUnder,
@@ -13,6 +16,7 @@ import {
   selectionToZeo,
   type DevtoolsResult,
 } from "./contract.js";
+import { tagAstroModuleOutcome, type AstroCompiler } from "./astro-tagger.js";
 import { resolveSocketPath, sendToZeo } from "./socket.js";
 import { DEFAULT_EXCLUDE, tagModule } from "./tagger.js";
 
@@ -38,6 +42,7 @@ const cleanId = (id: string) => {
 };
 
 const TAGGER = "zeo-devtools:tagger";
+const ASTRO_TAGGER = "zeo-devtools:astro-tagger";
 const CLIENT_URL = "/@zeo-devtools/client";
 const CLIENT_ID = "\0zeo-devtools-client";
 /** The first Vite whose HMR socket checks Origin and a token (CVE-2025-24010). */
@@ -79,6 +84,57 @@ const failure = (error: "bad_request" | "outside_project" | "unreachable", messa
 /** plugin-react's `compiler: true` plugin: also `enforce: "pre"`, and it compiles JSX away. */
 const REACT_COMPILER = "vite:react-compiler";
 const JSX_ID = /\.[jt]sx(?:$|\?)/;
+const ASTRO_ID = /\.astro(?:$|\?)/;
+const ASTRO_COMPILER = "@astrojs/compiler-rs";
+
+/** A log value as-is, or JSON-quoted when it would break the `key=value` line apart. */
+const logValue = (value: string) => (/^[^\s"=]+$/.test(value) ? value : JSON.stringify(value));
+
+/** Imports `@astrojs/compiler-rs` as `from` resolves it, or says why it could not. */
+async function importAstroCompiler(
+  from: string,
+): Promise<{ compiler: AstroCompiler } | { compiler: undefined; error: string }> {
+  try {
+    const resolved = createRequire(from).resolve(ASTRO_COMPILER);
+    const loaded: unknown = await import(pathToFileURL(resolved).href);
+    if (typeof (loaded as Partial<AstroCompiler> | null)?.parse !== "function") {
+      return { compiler: undefined, error: "no_parse_export" };
+    }
+    return { compiler: loaded as AstroCompiler };
+  } catch (error: unknown) {
+    const code = (error as { code?: unknown } | null)?.code;
+    return { compiler: undefined, error: typeof code === "string" ? code : "load_failed" };
+  }
+}
+
+/**
+ * `@astrojs/compiler-rs` as the APP's installation provides it, never this package's own copy:
+ * first the copy the app's `astro` resolves (Astro nests its own, so this is the parser the
+ * app's Astro compiles with), then the app root's copy (an optional peer). `undefined` when
+ * neither loads, with the app root's reason as a short code for the log line.
+ */
+async function loadAstroCompiler(
+  root: string,
+): Promise<{ compiler: AstroCompiler } | { compiler: undefined; error: string }> {
+  const app = join(root, "package.json");
+  try {
+    const astro = createRequire(app).resolve("astro/package.json");
+    const fromAstro = await importAstroCompiler(astro);
+    if (fromAstro.compiler !== undefined) {
+      return fromAstro;
+    }
+  } catch {
+    // The app has no resolvable `astro`: only the app root's copy is left to try.
+  }
+  return importAstroCompiler(app);
+}
+
+/** One dev-server start's `.astro` state: its compiler, loaded once, and its warnings. */
+interface AstroState {
+  compiler: Promise<AstroCompiler | undefined>;
+  /** Files already reported as `astro_parse_failed` by this server. */
+  parseFailed: Set<string>;
+}
 
 export function zeo(options?: ZeoPluginOptions): Plugin[] {
   // Validated here, not in a hook, so invalid options fail `vite build` as well as `vite dev`.
@@ -92,6 +148,64 @@ export function zeo(options?: ZeoPluginOptions): Plugin[] {
   ]);
   let root = "";
   let mode = "development";
+  let lastConfig: ResolvedConfig | undefined;
+  // Keyed by the server's top-level config, so one zeo() result shared by two servers, or a
+  // restarted server, logs and loads per server start rather than once per process (R1.7).
+  const astroStates = new WeakMap<ResolvedConfig, AstroState>();
+
+  const astroStateFor = (config: ResolvedConfig): AstroState => {
+    let state = astroStates.get(config);
+    if (state === undefined) {
+      // Created on the server's first `.astro` module of the app, so the compiler loads then.
+      const compiler = loadAstroCompiler(config.root).then((loaded) => {
+        if (loaded.compiler === undefined) {
+          config.logger.warn(
+            `zeo-devtools event=warning reason=astro_compiler_missing error=${logValue(loaded.error)} ` +
+              `hint=${logValue(`add ${ASTRO_COMPILER} to the app's dependencies, or no .astro element is tagged`)}`,
+          );
+        }
+        return loaded.compiler;
+      });
+      state = { compiler, parseFailed: new Set() };
+      astroStates.set(config, state);
+    }
+    return state;
+  };
+
+  /** Tags one `.astro` module of the app, or `null` to leave it to Astro unchanged. */
+  const transformAstro = async (
+    config: ResolvedConfig,
+    code: string,
+    id: string,
+    envRoot: string,
+  ) => {
+    // Astro's sub-modules (`?astro&type=style…`) are the same file's script or style blocks:
+    // only the plain module is the template, and the component name comes from its file name.
+    if (id.includes("?") || !isUnder(id, envRoot)) {
+      return null;
+    }
+    const rel = posix.relative(envRoot, id);
+    if (rel.split("/").includes("node_modules")) {
+      return null;
+    }
+    const state = astroStateFor(config);
+    const compiler = await state.compiler;
+    if (compiler === undefined) {
+      return null;
+    }
+    const result = tagAstroModuleOutcome(code, id, envRoot, exclude, compiler);
+    if (result.outcome === "parse_failed") {
+      if (!state.parseFailed.has(id)) {
+        state.parseFailed.add(id);
+        // Astro reports the error itself; this line only says why the module carries no tag.
+        config.logger.warn(
+          `zeo-devtools event=warning reason=astro_parse_failed file=${logValue(rel)}`,
+        );
+      }
+      return null;
+    }
+    return result.outcome === "tagged" ? { code: result.code, map: result.map } : null;
+  };
 
   const tagger: Plugin = {
     name: TAGGER,
@@ -121,6 +235,41 @@ export function zeo(options?: ZeoPluginOptions): Plugin[] {
         }
         const envRoot = this.environment?.config.root ?? root;
         return tagModule(code, cleanId(id), envRoot, exclude);
+      },
+    },
+  };
+
+  // A plugin of its own, so only `.astro` modules move ahead: Astro lists its own
+  // `enforce: "pre"` plugins before every user and integration plugin, so `enforce` alone hands
+  // this hook Astro's compiled JS. `order: "pre"` runs it before every hook without one,
+  // Astro's compile included; the JSX tagger above keeps its place behind a `pre` plugin
+  // listed earlier, as story 033's react_compiler_first warning expects.
+  // Known cost: Astro keeps the code it was handed (the tagged template) to diff a later edit
+  // against the raw file, so a style-only edit of a tagged file reloads the component instead
+  // of only its styles; what renders is unaffected.
+  const astroTagger: Plugin = {
+    name: ASTRO_TAGGER,
+    apply: "serve",
+    enforce: "pre",
+    configResolved(config) {
+      lastConfig = config;
+    },
+    transform: {
+      order: "pre",
+      filter: { id: ASTRO_ID },
+      handler(code, id) {
+        // Vite applies hook filters only from 6.3 on, and this package accepts older versions:
+        // re-check the id, so no other module is tagged or loads the Astro compiler.
+        if (!ASTRO_ID.test(id)) {
+          return null;
+        }
+        // As the JSX tagger: the environment's own config, and never in Vitest's mode (R1.8).
+        const config = this.environment?.getTopLevelConfig() ?? lastConfig;
+        if (config === undefined || (this.environment?.config.mode ?? config.mode) === "test") {
+          return null;
+        }
+        const envRoot = this.environment?.config.root ?? config.root;
+        return transformAstro(config, code, id, envRoot);
       },
     },
   };
@@ -252,7 +401,7 @@ export function zeo(options?: ZeoPluginOptions): Plugin[] {
     },
   };
 
-  return [tagger, relay];
+  return [tagger, astroTagger, relay];
 }
 
 export default zeo;

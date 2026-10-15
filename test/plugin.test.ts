@@ -1,8 +1,9 @@
 // Story 033, task 3.2 — the Vite plugin wrapper, against a REAL `createServer` and a REAL
 // `build()` over `test/fixtures/app` (design.md §A1, §Security "Production builds").
 // Requirements: R1.1 (served module tagged), R1.3 (default exclude list), R1.6, R11.1.
-// Contract: `zeo(options?: ZeoPluginOptions): Plugin[]` — two plugins, both
-// `apply: 'serve'`, the first (the tagger) `enforce: 'pre'`.
+// Contract: `zeo(options?: ZeoPluginOptions): Plugin[]` — serve-only plugins, the first (the
+// tagger) `enforce: 'pre'`. Story 052 (task 1.2) added a third, the `.astro` tagger, between the
+// tagger and the relay; its own checks are in test/astro-plugin.order.test.ts.
 //
 // Hostile halves: plugin order — react() listed BEFORE zeo() must still tag (the case that
 // breaks without `enforce: 'pre'`), and zeo() before react() must tag too. A request id
@@ -39,10 +40,10 @@ async function filesUnder(dir: string): Promise<string[]> {
 }
 
 describe("zeo() shape", () => {
-  it("returns two serve-only plugins, the first enforced pre", () => {
+  it("returns three serve-only plugins, the first enforced pre", () => {
     const plugins = zeo();
     expect(Array.isArray(plugins)).toBe(true);
-    expect(plugins).toHaveLength(2);
+    expect(plugins).toHaveLength(3);
     for (const p of plugins) {
       expect(p.apply).toBe("serve");
     }
