@@ -16,7 +16,11 @@ import {
   selectionToZeo,
   type DevtoolsResult,
 } from "./contract.js";
-import { tagAstroModuleOutcome, type AstroCompiler } from "./astro-tagger.js";
+import {
+  astroCompilerUsesStringIndices,
+  tagAstroModuleOutcome,
+  type AstroCompiler,
+} from "./astro-tagger.js";
 import { resolveSocketPath, sendToZeo } from "./socket.js";
 import { DEFAULT_EXCLUDE, tagModule } from "./tagger.js";
 
@@ -35,6 +39,15 @@ const optionsSchema = z
 
 export type ZeoPluginOptions = NonNullable<z.input<typeof optionsSchema>>;
 
+/** The options as `zeo()` and `zeoAstro()` both accept them, or the one error both throw. */
+function parseOptions(options: ZeoPluginOptions | undefined): z.output<typeof optionsSchema> {
+  const parsed = optionsSchema.safeParse(options);
+  if (!parsed.success) {
+    throw new Error("vite-plugin-zeo: invalid options", { cause: parsed.error });
+  }
+  return parsed.data;
+}
+
 /** Strips Vite's query suffix (`?t=…`, `?v=…`) so the id is a file path again. */
 const cleanId = (id: string) => {
   const query = id.indexOf("?");
@@ -43,6 +56,7 @@ const cleanId = (id: string) => {
 
 const TAGGER = "zeo-devtools:tagger";
 const ASTRO_TAGGER = "zeo-devtools:astro-tagger";
+const RELAY = "zeo-devtools:relay";
 const CLIENT_URL = "/@zeo-devtools/client";
 const CLIENT_ID = "\0zeo-devtools-client";
 /** The first Vite whose HMR socket checks Origin and a token (CVE-2025-24010). */
@@ -90,43 +104,65 @@ const ASTRO_COMPILER = "@astrojs/compiler-rs";
 /** A log value as-is, or JSON-quoted when it would break the `key=value` line apart. */
 const logValue = (value: string) => (/^[^\s"=]+$/.test(value) ? value : JSON.stringify(value));
 
-/** Imports `@astrojs/compiler-rs` as `from` resolves it, or says why it could not. */
-async function importAstroCompiler(
-  from: string,
-): Promise<{ compiler: AstroCompiler } | { compiler: undefined; error: string }> {
+/** A compiler copy that could be used, or why none could. */
+type LoadedCompiler =
+  | { compiler: AstroCompiler }
+  | { compiler: undefined; reason: "missing" | "incompatible"; error: string };
+
+/**
+ * Imports `@astrojs/compiler-rs` as `from` resolves it, or says why it could not: `missing` when
+ * it does not load or has no `parse`, `incompatible` when it loads but reports positions in
+ * UTF-8 bytes (compiler-rs before 0.4), which would tag elements at wrong columns.
+ */
+async function importAstroCompiler(from: string): Promise<LoadedCompiler> {
+  let compiler: AstroCompiler;
   try {
     const resolved = createRequire(from).resolve(ASTRO_COMPILER);
     const loaded: unknown = await import(pathToFileURL(resolved).href);
     if (typeof (loaded as Partial<AstroCompiler> | null)?.parse !== "function") {
-      return { compiler: undefined, error: "no_parse_export" };
+      return { compiler: undefined, reason: "missing", error: "no_parse_export" };
     }
-    return { compiler: loaded as AstroCompiler };
+    compiler = loaded as AstroCompiler;
   } catch (error: unknown) {
     const code = (error as { code?: unknown } | null)?.code;
-    return { compiler: undefined, error: typeof code === "string" ? code : "load_failed" };
+    return {
+      compiler: undefined,
+      reason: "missing",
+      error: typeof code === "string" ? code : "load_failed",
+    };
   }
+  return astroCompilerUsesStringIndices(compiler)
+    ? { compiler }
+    : { compiler: undefined, reason: "incompatible", error: "byte_offsets" };
 }
 
 /**
  * `@astrojs/compiler-rs` as the APP's installation provides it, never this package's own copy:
- * first the copy the app's `astro` resolves (Astro nests its own, so this is the parser the
- * app's Astro compiles with), then the app root's copy (an optional peer). `undefined` when
- * neither loads, with the app root's reason as a short code for the log line.
+ * first the app root's copy, then the copy the app's `astro` resolves (Astro nests its own, so
+ * an app that never declared the peer still works, under pnpm too). The app root's copy may be
+ * one the app declared on purpose, or one another package's dependency hoisted there (e.g.
+ * astro-eslint-parser@3 wants ^0.3.1), so each copy must pass a position check before it is
+ * used: a copy that reports byte offsets is skipped. `undefined` when neither copy is usable,
+ * `incompatible` if either loaded but failed the check, else `missing` with the app root's
+ * reason as a short code for the log line.
  */
-async function loadAstroCompiler(
-  root: string,
-): Promise<{ compiler: AstroCompiler } | { compiler: undefined; error: string }> {
+async function loadAstroCompiler(root: string): Promise<LoadedCompiler> {
   const app = join(root, "package.json");
+  const fromApp = await importAstroCompiler(app);
+  if (fromApp.compiler !== undefined) {
+    return fromApp;
+  }
+  let fromAstro: LoadedCompiler | undefined;
   try {
     const astro = createRequire(app).resolve("astro/package.json");
-    const fromAstro = await importAstroCompiler(astro);
-    if (fromAstro.compiler !== undefined) {
-      return fromAstro;
-    }
+    fromAstro = await importAstroCompiler(astro);
   } catch {
-    // The app has no resolvable `astro`: only the app root's copy is left to try.
+    // The app has no resolvable `astro`: the app root's reason is the one to report.
   }
-  return importAstroCompiler(app);
+  if (fromAstro?.compiler !== undefined) {
+    return fromAstro;
+  }
+  return fromAstro?.reason === "incompatible" ? fromAstro : fromApp;
 }
 
 /** One dev-server start's `.astro` state: its compiler, loaded once, and its warnings. */
@@ -138,14 +174,8 @@ interface AstroState {
 
 export function zeo(options?: ZeoPluginOptions): Plugin[] {
   // Validated here, not in a hook, so invalid options fail `vite build` as well as `vite dev`.
-  const parsed = optionsSchema.safeParse(options);
-  if (!parsed.success) {
-    throw new Error("vite-plugin-zeo: invalid options", { cause: parsed.error });
-  }
-  const exclude: ReadonlySet<string> = new Set([
-    ...DEFAULT_EXCLUDE,
-    ...(parsed.data?.exclude ?? []),
-  ]);
+  const opts = parseOptions(options);
+  const exclude: ReadonlySet<string> = new Set([...DEFAULT_EXCLUDE, ...(opts?.exclude ?? [])]);
   let root = "";
   let mode = "development";
   let lastConfig: ResolvedConfig | undefined;
@@ -158,7 +188,12 @@ export function zeo(options?: ZeoPluginOptions): Plugin[] {
     if (state === undefined) {
       // Created on the server's first `.astro` module of the app, so the compiler loads then.
       const compiler = loadAstroCompiler(config.root).then((loaded) => {
-        if (loaded.compiler === undefined) {
+        if (loaded.compiler === undefined && loaded.reason === "incompatible") {
+          config.logger.warn(
+            `zeo-devtools event=warning reason=astro_compiler_incompatible error=${logValue(loaded.error)} ` +
+              `hint=${logValue(`${ASTRO_COMPILER} >=0.4.1 is needed at the app root or in astro, or no .astro element is tagged`)}`,
+          );
+        } else if (loaded.compiler === undefined) {
           config.logger.warn(
             `zeo-devtools event=warning reason=astro_compiler_missing error=${logValue(loaded.error)} ` +
               `hint=${logValue(`add ${ASTRO_COMPILER} to the app's dependencies, or no .astro element is tagged`)}`,
@@ -275,13 +310,13 @@ export function zeo(options?: ZeoPluginOptions): Plugin[] {
   };
 
   const clientOptions = {
-    shortcut: parsed.data?.shortcut,
-    screenshot: parsed.data?.screenshot,
+    shortcut: opts?.shortcut,
+    screenshot: opts?.screenshot,
   };
   let relayEnabled = false;
 
   const relay: Plugin = {
-    name: "zeo-devtools:relay",
+    name: RELAY,
     apply: "serve",
     config() {
       // The picker is injected by this plugin, so Vite's startup scan cannot see that it
@@ -315,6 +350,17 @@ export function zeo(options?: ZeoPluginOptions): Plugin[] {
     },
     configureServer(server) {
       const logger = server.config.logger;
+      // zeo() listed twice (e.g. story 033's zeo() kept next to zeoAstro()): only the first
+      // relay listens, or every pick would reach Zeo once per copy and the extra answer could
+      // pair with the wrong in-flight send (R2.5).
+      const first = server.config.plugins.find((plugin) => plugin.name === RELAY);
+      if (first !== relay) {
+        logger.warn(
+          `zeo-devtools event=warning reason=duplicate_plugin plugin=${logValue(RELAY)} ` +
+            `hint=${logValue("zeo() is registered more than once; only the first copy relays picks")}`,
+        );
+        return;
+      }
       if (!relayEnabled) {
         logger.warn(
           `zeo-devtools event=disabled reason=vite_too_old found=${viteVersion} required=${VITE_MIN}`,
@@ -365,7 +411,7 @@ export function zeo(options?: ZeoPluginOptions): Plugin[] {
             shot,
           };
         }
-        const socket = resolveSocketPath(parsed.data?.socketPath);
+        const socket = resolveSocketPath(opts?.socketPath);
         if (!socket.ok) {
           return { result: failure("unreachable", socket.message), items, shot };
         }
@@ -402,6 +448,49 @@ export function zeo(options?: ZeoPluginOptions): Plugin[] {
   };
 
   return [tagger, astroTagger, relay];
+}
+
+/**
+ * The part of Astro's `astro:config:setup` context `zeoAstro()` uses. Declared here rather than
+ * imported, so `dist/` never imports `astro`: a Vite-only app installs no Astro. Method syntax
+ * keeps it assignable to Astro's own `AstroIntegration` hook type.
+ */
+export interface ZeoAstroConfigSetup {
+  command: "dev" | "build" | "preview" | "sync";
+  updateConfig(config: { vite: { plugins: Plugin[] } }): unknown;
+  injectScript(stage: "page", content: string): void;
+}
+
+/** An Astro integration, as far as `zeoAstro()` fills one in. */
+export interface ZeoAstroIntegration {
+  name: string;
+  hooks: {
+    "astro:config:setup"(ctx: ZeoAstroConfigSetup): void;
+  };
+}
+
+/**
+ * `zeo()` for an Astro app: list `zeoAstro(options)` in `integrations`. Under `astro dev` it adds
+ * `zeo(options)` to Vite's plugins and loads the picker on every page through a page script;
+ * under any other command it adds nothing, so a build carries none of it (R2.1–R2.3).
+ */
+export function zeoAstro(options?: ZeoPluginOptions): ZeoAstroIntegration {
+  // At config load, so invalid options fail `astro build` as well as `astro dev`.
+  parseOptions(options);
+  return {
+    name: "zeo-devtools",
+    hooks: {
+      "astro:config:setup"({ command, updateConfig, injectScript }) {
+        if (command !== "dev") {
+          return;
+        }
+        updateConfig({ vite: { plugins: zeo(options) } });
+        // Astro never runs `transformIndexHtml`, so the relay's own injection never fires here:
+        // the page script imports the module the relay resolves and loads instead.
+        injectScript("page", `import ${JSON.stringify(CLIENT_URL)};`);
+      },
+    },
+  };
 }
 
 export default zeo;

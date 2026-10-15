@@ -71,6 +71,28 @@ function parseTemplate(code: string, compiler: AstroCompiler): unknown[] | undef
   }
 }
 
+/** `é` is one string index but two UTF-8 bytes, so `<a>` starts at 1 only in string indices. */
+const POSITION_PROBE = "é<a></a>";
+
+/**
+ * Whether `compiler` reports positions as string indices, the unit `locate()` turns into the
+ * line and column the editor shows. `@astrojs/compiler-rs` before 0.4 reports UTF-8 byte
+ * offsets, which would put every element after a non-ASCII character at a wrong column. Checked
+ * by behaviour, not by version, so a wrapper that reports its own version still passes.
+ */
+export function astroCompilerUsesStringIndices(compiler: AstroCompiler): boolean {
+  // Never throws: the answer is cached per server, so an exception here would fail every
+  // `.astro` module of that server instead of rejecting one compiler copy.
+  try {
+    const element = parseTemplate(POSITION_PROBE, compiler)?.find(
+      (node) => isNode(node) && node.type === "JSXElement",
+    );
+    return isNode(element) && element.start === 1;
+  } catch {
+    return false;
+  }
+}
+
 /** 1-based line and column of string index `index`, from the sorted starts of every line. */
 function locate(lineStarts: readonly number[], index: number): { line: number; column: number } {
   let low = 0;
