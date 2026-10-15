@@ -1,0 +1,89 @@
+name: Publish and Release
+on:
+  push:
+    branches:
+      - main
+
+# Default to no permissions; each job requests exactly what it needs.
+permissions: {}
+
+# Every action is pinned by commit SHA, copied from claude-agent-acp-plus so both
+# repositories move together.
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: release
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+    steps:
+      - uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
+        with:
+          egress-policy: audit
+      # A GitHub App token, not GITHUB_TOKEN: GitHub holds every workflow run on a PR
+      # opened by github-actions[bot] in action_required until a maintainer approves it,
+      # so release PRs would merge with no CI at all. A PR authored by an App with write
+      # access runs its checks without that approval. The App and its RELEASE_APP_*
+      # secrets belong to the zeo-workspace organization.
+      - name: Generate GitHub App token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        id: app-token
+        with:
+          client-id: ${{ secrets.RELEASE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+      - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7
+        id: release
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+          # Do not add release-type here. The action ignores config-file whenever
+          # release-type is set, which silently disables the pre-1.0 versioning rules
+          # in release-please-config.json and lets a breaking change jump straight to
+          # 1.0.0. The node release type is declared in that config instead.
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+
+  publish-npm:
+    name: Publish to npm
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [release-please]
+    if: ${{ needs.release-please.outputs.release_created }}
+    environment: release
+    permissions:
+      contents: read
+      # npm trusted publishing: the OIDC token replaces a stored npm token and signs
+      # the provenance attestation.
+      id-token: write
+    steps:
+      - uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: "24"
+          registry-url: "https://registry.npmjs.org"
+      # Trusted publishing needs npm >= 11.5.1 (and Node >= 22.14.0, which Node 24
+      # satisfies). Node 24's bundled npm meets it; this step fails loudly if a runner
+      # image ever ships an older one, instead of installing an unpinned npm@latest at
+      # publish time, which would itself be a supply-chain exposure.
+      - name: Require npm >= 11.5.1
+        run: |
+          set -euo pipefail
+          version="$(npm --version)"
+          if ! printf '%s\n%s\n' 11.5.1 "${version}" | sort --version-sort --check=quiet; then
+            echo "::error::npm ${version} is older than 11.5.1, which trusted publishing requires"
+            exit 1
+          fi
+          echo "npm ${version}, node $(node --version)"
+      - run: npm ci
+      - run: npm run build
+      - run: npm publish --provenance

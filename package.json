@@ -1,9 +1,17 @@
 {
   "name": "@lucascouts/vite-plugin-zeo",
-  "version": "0.1.0",
-  "description": "Vite dev plugin: click an element in the page and Zeo's agent composer receives its JSX source, a DOM summary and a screenshot.",
+  "version": "0.2.0",
+  "description": "Vite and Astro dev plugin: click an element in the page and Zeo's agent composer receives its JSX or .astro source, a DOM summary and a screenshot.",
   "type": "module",
   "license": "Apache-2.0",
+  "homepage": "https://github.com/zeo-workspace/zeo-devtools#readme",
+  "bugs": {
+    "url": "https://github.com/zeo-workspace/zeo-devtools/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/zeo-workspace/zeo-devtools.git"
+  },
   "engines": {
     "node": ">=24"
   },
@@ -15,8 +23,13 @@
     "./client": "./dist/client/index.js"
   },
   "files": [
-    "dist"
+    "dist",
+    "CHANGELOG.md"
   ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
