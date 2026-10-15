@@ -108,9 +108,19 @@ test.beforeEach(async ({ page }) => {
 
 // ---- helpers ---------------------------------------------------------------------------
 
+/**
+ * Loads the fixture in `page` and returns once the picker is mounted, with `page` as the
+ * active tab. A tab left behind another one (R6.2 opens a second page after the fixture's)
+ * is throttled by Chromium to ~3 animation frames per second, measured under `taskset -c 0`;
+ * every `hover()` then waits seconds for its stability check and `isPicking` outlives its
+ * poll although the picker is already on. A user picks in the tab they are looking at.
+ */
 async function open(page: Page, url = noShot.url) {
+  await page.bringToFront();
   await page.goto(url);
   await expect(page.locator("#ready")).toHaveText("Fixture app ready");
+  // The picker's own ready signal: `mount()` sets it and builds its UI in the same task.
+  await expect(page.locator("html[data-zeo-devtools]")).toBeAttached();
 }
 
 const pickerButton = (page: Page): Locator => page.getByRole("button", { name: /zeo|pick/i });
