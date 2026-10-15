@@ -1,4 +1,4 @@
-# @lucascouts/vite-plugin-zeo
+# @lucascouts/zeo-devtools
 
 A Vite dev-server plugin for Zeo, the Zed editor build of the `zeo-workspace` chain, for Vite
 apps and Astro sites. Turn on the picker in the page you are developing, click an element, and
@@ -43,7 +43,7 @@ no `data-zeo-*` attribute and no picker code.
 ## Install
 
 ```bash
-npm i -D @lucascouts/vite-plugin-zeo
+npm i -D @lucascouts/zeo-devtools
 ```
 
 To try a build that is not on npm yet, see [Development](#development).
@@ -54,7 +54,7 @@ To try a build that is not on npm yet, see [Development](#development).
 // vite.config.js
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
-import { zeo } from "@lucascouts/vite-plugin-zeo";
+import { zeo } from "@lucascouts/zeo-devtools";
 
 export default defineConfig({
   // zeo() before react(), so the tagger sees JSX before it is compiled away.
@@ -86,7 +86,7 @@ the config. It is read by the dev server, not by Zeo.
 ```js
 // astro.config.mjs
 import { defineConfig } from "astro/config";
-import { zeoAstro } from "@lucascouts/vite-plugin-zeo";
+import { zeoAstro } from "@lucascouts/zeo-devtools";
 
 export default defineConfig({
   integrations: [zeoAstro()],
@@ -274,10 +274,10 @@ To install a build of this repository into an app, pack a tarball and install th
 ```bash
 cd /path/to/zeo-devtools
 npm ci
-npm pack                      # runs the build; writes lucascouts-vite-plugin-zeo-<version>.tgz
+npm pack                      # runs the build; writes lucascouts-zeo-devtools-<version>.tgz
 
 cd /path/to/your-app
-npm i -D /path/to/zeo-devtools/lucascouts-vite-plugin-zeo-<version>.tgz
+npm i -D /path/to/zeo-devtools/lucascouts-zeo-devtools-<version>.tgz
 ```
 
 Use the tarball, not `npm i -D /path/to/zeo-devtools`. A directory install is a symlink, so

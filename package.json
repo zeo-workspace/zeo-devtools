@@ -1,5 +1,5 @@
 {
-  "name": "@lucascouts/vite-plugin-zeo",
+  "name": "@lucascouts/zeo-devtools",
   "version": "0.2.0",
   "description": "Vite and Astro dev plugin: click an element in the page and Zeo's agent composer receives its JSX or .astro source, a DOM summary and a screenshot.",
   "type": "module",

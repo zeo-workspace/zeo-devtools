@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to `@lucascouts/vite-plugin-zeo` are documented in this file.
+All notable changes to `@lucascouts/zeo-devtools` are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
@@ -22,7 +22,8 @@ Astro support, and the first version published to npm.
 ### Changed
 
 - `zeo()` returns three plugins instead of two: the `.astro` tagger runs as its own `order: "pre"` transform, so it sees templates before Astro compiles them while the JSX tagger keeps its original order.
-- Install from npm with `npm i -D @lucascouts/vite-plugin-zeo`. The tarball route is now a development note in the README.
+- Install from npm with `npm i -D @lucascouts/zeo-devtools`. The tarball route is now a development note in the README.
+- The npm name is `@lucascouts/zeo-devtools`, matching the repository. A first upload as `@lucascouts/vite-plugin-zeo` on 2026-10-15 was withdrawn the same day; option errors now start with `zeo-devtools:`.
 
 ### Fixed
 

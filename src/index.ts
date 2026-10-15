@@ -1,4 +1,4 @@
-// @lucascouts/vite-plugin-zeo (story 033): in `vite dev`, tag every intrinsic JSX element with
+// @lucascouts/zeo-devtools (story 033): in `vite dev`, tag every intrinsic JSX element with
 // its source and relay picker selections to Zeo's devtools bridge. Both plugins are
 // serve-only, so `vite build` output carries nothing of either (R11.1). Story 052 adds the
 // intrinsic elements of `.astro` templates, parsed with the app's `@astrojs/compiler-rs` (the
@@ -43,7 +43,7 @@ export type ZeoPluginOptions = NonNullable<z.input<typeof optionsSchema>>;
 function parseOptions(options: ZeoPluginOptions | undefined): z.output<typeof optionsSchema> {
   const parsed = optionsSchema.safeParse(options);
   if (!parsed.success) {
-    throw new Error("vite-plugin-zeo: invalid options", { cause: parsed.error });
+    throw new Error("zeo-devtools: invalid options", { cause: parsed.error });
   }
   return parsed.data;
 }
