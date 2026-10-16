@@ -61,7 +61,9 @@ async function dev(screenshot: boolean) {
     root: ROOT,
     configFile: false,
     logLevel: "silent",
-    plugins: [react(), zeo({ screenshot })],
+    // The picker relay only: no panel and no announce on the counted fake socket (story 055
+    // made both the default; deviation 5.1 did the same for the relay unit tests).
+    plugins: [react(), zeo({ screenshot, panel: false })],
     server: { host: "127.0.0.1", port: 0, strictPort: false },
   });
   await server.listen();

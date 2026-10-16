@@ -5,7 +5,14 @@
     "noEmit": true,
     "lib": ["ES2024", "DOM", "DOM.Iterable"],
     "types": ["node", "vite/client"],
-    "forceConsistentCasingInFileNames": true
+    "forceConsistentCasingInFileNames": true,
+    // @axe-core/playwright has no "type": "module" and one `types` condition (a CJS .d.ts), so
+    // under nodenext its ESM default export types as the module namespace. Type it from the
+    // .d.mts of the ESM file Node's `import` condition loads. Types only: Playwright runs with
+    // tsconfig.playwright.json, which drops this mapping.
+    "paths": {
+      "@axe-core/playwright": ["./node_modules/@axe-core/playwright/dist/index.d.mts"]
+    }
   },
   "include": ["src/**/*.ts", "test/**/*.ts", "e2e/**/*.ts", "playwright.config.ts", "vitest.config.ts"],
   "exclude": ["node_modules", "dist", "test/fixtures"]

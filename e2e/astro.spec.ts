@@ -172,7 +172,9 @@ test.describe("astro dev", () => {
       configFile: false,
       logLevel: "silent",
       devToolbar: { enabled: false },
-      integrations: [zeoAstro({ screenshot: false })],
+      // The picker relay only: no panel and no announce on the counted fake socket (story 055
+      // made both the default; deviation 5.1 did the same for the relay unit tests).
+      integrations: [zeoAstro({ screenshot: false, panel: false })],
       server: { host: "127.0.0.1", port },
     });
     url = `http://127.0.0.1:${server.address.port}/`;

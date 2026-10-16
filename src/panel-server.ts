@@ -194,6 +194,35 @@ const PAGE_TYPES: Record<string, string> = {
 
 const utf8 = new TextDecoder("utf-8", { fatal: true });
 
+/** The page's empty slot for the app's URL (src/panel/index.html). */
+const APP_URL_SLOT = '<meta name="zeo-app-url" content="" />';
+
+const HTML_ESCAPES: Record<string, string> = {
+  "&": "&amp;",
+  '"': "&quot;",
+  "'": "&#39;",
+  "<": "&lt;",
+  ">": "&gt;",
+};
+
+/**
+ * `html` with the app's URL written into its `zeo-app-url` slot, escaped for an attribute value.
+ * The page reads it while its module runs, so the iframe exists before the document's `load` and
+ * the app's first load is part of the page's (R6.7: nothing navigates once the page is up). A page
+ * without the slot is served unchanged and falls back to `GET /api/config`.
+ */
+export function withAppUrl(html: Buffer, appUrl: string): Buffer {
+  const text = html.toString("utf8");
+  if (!text.includes(APP_URL_SLOT)) {
+    return html;
+  }
+  const value = appUrl.replace(/[&"'<>]/g, (c) => HTML_ESCAPES[c] ?? c);
+  return Buffer.from(
+    text.replace(APP_URL_SLOT, () => `<meta name="zeo-app-url" content="${value}" />`),
+    "utf8",
+  );
+}
+
 /** `dist/panel/` beside the built module; from source, the same directory of the build. */
 function defaultPageDir(): string {
   const here = dirname(fileURLToPath(import.meta.url));
@@ -657,7 +686,12 @@ export async function startPanelServer(options: PanelServerOptions): Promise<Pan
    * Serves `file` when it resolves, symlinks followed, to a regular file inside `within`; a link
    * out of the directory answers 404 like a missing file.
    */
-  const servePage = async (res: ServerResponse, file: string, within: string) => {
+  const servePage = async (
+    res: ServerResponse,
+    file: string,
+    within: string,
+    fill: (body: Buffer) => Buffer = (body) => body,
+  ) => {
     let body: Buffer;
     try {
       const [real, realWithin] = await Promise.all([realpath(file), realpath(within)]);
@@ -666,7 +700,7 @@ export async function startPanelServer(options: PanelServerOptions): Promise<Pan
         sendText(res, 404, "Not found");
         return;
       }
-      body = await readFile(real);
+      body = fill(await readFile(real));
     } catch (err) {
       const code = (err as NodeJS.ErrnoException).code;
       if (code === "ENOENT" || code === "ENOTDIR") {
@@ -849,7 +883,9 @@ export async function startPanelServer(options: PanelServerOptions): Promise<Pan
     }
     switch (route) {
       case "page":
-        await servePage(res, resolvePath(pageDir, "index.html"), pageDir);
+        await servePage(res, resolvePath(pageDir, "index.html"), pageDir, (html) =>
+          withAppUrl(html, appUrl),
+        );
         return;
       case "assets": {
         const file = assetFile(path.slice("/assets/".length));

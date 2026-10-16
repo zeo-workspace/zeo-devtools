@@ -1,0 +1,8 @@
+{
+  // Playwright applies tsconfig `paths` at run time. tsconfig.json maps @axe-core/playwright to
+  // its .d.mts for the type checker only; the tests must load the package the normal way.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "paths": {}
+  }
+}

@@ -117,10 +117,41 @@ body {
   min-height: 0;
 }
 
+/* The thread's landmark spans the panel's column and the divider's, and holds both: the divider
+   is inside a landmark like everything else on the page. */
 .pane-thread {
   display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  grid-column: 1 / span 2;
+  grid-template-columns: minmax(0, 1fr) 11px;
   background: var(--paper);
+}
+
+.thread {
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  /* One column no wider than the pane: an `auto` track grows to its widest child's min-content
+     (a long root in the header), pushing the composer's buttons under the app's iframe. */
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+}
+
+/* Explicit rows: the banner is `hidden` most of the time, and auto-placement would then move the
+   chat into the stretching row and the transcript into the banner's. */
+.thread > .hdr {
+  grid-row: 1;
+}
+
+.thread > .banner {
+  grid-row: 2;
+}
+
+.thread > .body {
+  grid-row: 3;
+}
+
+.thread > .chat {
+  grid-row: 4;
 }
 
 /* The divider: a hairline with a grip; the whole 11 px strip is the target. */
@@ -252,6 +283,11 @@ body {
   .workbench {
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows: minmax(0, 3fr) minmax(0, 2fr);
+  }
+
+  .pane-thread {
+    grid-column: auto;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .divider {
@@ -521,9 +557,10 @@ input {
   border-bottom: 0;
 }
 
+/* A slide, not a fade: a fading entry is text below 4.5:1 contrast for as long as it fades, and a
+   streamed reply arrives one entry at a time. */
 @keyframes entry-in {
   from {
-    opacity: 0;
     transform: translateY(3px);
   }
 }

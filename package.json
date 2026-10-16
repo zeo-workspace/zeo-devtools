@@ -36,7 +36,7 @@
     "lint": "eslint src test e2e scripts",
     "format:check": "prettier --check src test e2e scripts",
     "test": "vitest run",
-    "e2e": "playwright test",
+    "e2e": "npm run build && playwright test",
     "prepack": "npm run build"
   },
   "peerDependencies": {
@@ -55,6 +55,7 @@
   },
   "devDependencies": {
     "@astrojs/compiler-rs": "0.5.1",
+    "@axe-core/playwright": "^4.13.0",
     "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.63.0",
     "@tsconfig/node24": "^24.0.5",

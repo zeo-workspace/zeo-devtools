@@ -1,7 +1,8 @@
 // The page's two panes and the divider between them (story 055, design.md §A3): the thread panel
 // on the left, the app on the right. The divider is a focusable `role="separator"` with a value,
 // moved by pointer drag or by the keyboard (arrows by 2 %, Page keys by 10 %, Home and End to the
-// limits), as the WAI-ARIA window-splitter pattern describes.
+// limits), as the WAI-ARIA window-splitter pattern describes. It sits inside the thread's `main`
+// landmark, beside the thread itself, so no content of the page lies outside a landmark.
 //
 // The width is the CSS custom property `--panel-size` on the workbench, set through the CSSOM
 // (`style.setProperty`). The page's CSP has no 'unsafe-inline' for styles, which refuses a `style`
@@ -16,7 +17,7 @@ const STEP = 2;
 const PAGE_STEP = 10;
 
 export interface Workbench {
-  /** The left pane, where the thread view mounts. */
+  /** Where the thread view mounts, inside the left pane (the divider is that pane's too). */
   panel: HTMLElement;
   /** The right pane, where the app's iframe goes (task 6.3). */
   app: HTMLElement;
@@ -30,18 +31,21 @@ export function mountWorkbench(root: HTMLElement): Workbench {
   const doc = root.ownerDocument;
   root.classList.add("workbench");
 
-  // The thread is the page's main content; the app is a labelled region beside it.
-  const panel = doc.createElement("main");
-  panel.className = "pane pane-thread";
-  panel.id = "zeo-thread-pane";
-  panel.setAttribute("aria-label", "Agent thread");
+  // The thread is the page's main content; the app is a labelled region beside it. The view
+  // replaces the children of `panel`, so the divider lives beside it, not in it.
+  const pane = doc.createElement("main");
+  pane.className = "pane pane-thread";
+  pane.id = "zeo-thread-pane";
+  pane.setAttribute("aria-label", "Agent thread");
+  const panel = doc.createElement("div");
+  panel.className = "thread";
 
   const divider = doc.createElement("div");
   divider.className = "divider";
   divider.tabIndex = 0;
   divider.setAttribute("role", "separator");
   divider.setAttribute("aria-orientation", "vertical");
-  divider.setAttribute("aria-controls", panel.id);
+  divider.setAttribute("aria-controls", pane.id);
   divider.setAttribute("aria-label", "Resize the thread panel");
   divider.setAttribute("aria-valuemin", String(PANEL_MIN));
   divider.setAttribute("aria-valuemax", String(PANEL_MAX));
@@ -54,7 +58,8 @@ export function mountWorkbench(root: HTMLElement): Workbench {
   app.className = "pane pane-app";
   app.setAttribute("aria-label", "App");
 
-  root.replaceChildren(panel, divider, app);
+  pane.append(panel, divider);
+  root.replaceChildren(pane, app);
 
   let size = PANEL_DEFAULT;
   const apply = (next: number) => {

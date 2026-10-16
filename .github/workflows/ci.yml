@@ -122,5 +122,7 @@ jobs:
       # downloads is the one that version pins, and only the browser this job tests.
       - name: Install the Playwright browser and its system dependencies
         run: npx --no-install playwright install --with-deps "${BROWSER}"
-      - name: Run the E2E suite
-        run: npx --no-install playwright test --project="${BROWSER}"
+      # `npm run e2e` builds first: the panel specs load the page from dist/panel/. This job
+      # builds nothing else, so the build is not repeated.
+      - name: Build and run the E2E suite
+        run: npm run e2e -- --project="${BROWSER}"

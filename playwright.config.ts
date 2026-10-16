@@ -5,6 +5,8 @@ import { defineConfig, devices } from "@playwright/test";
 
 export default defineConfig({
   testDir: "e2e",
+  // tsconfig.json without its type-only `paths` (see tsconfig.playwright.json).
+  tsconfig: "./tsconfig.playwright.json",
   // One fake Zeo socket and one pair of dev servers per worker: keep it to one worker so
   // the fake's request log is never shared between tests running at the same time.
   workers: 1,

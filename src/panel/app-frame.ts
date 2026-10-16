@@ -1,9 +1,11 @@
 // The app pane (story 055, design.md §A3 "Iframe", §A4, R3.2, GOTCHA G13): the app in a sandboxed
 // iframe beside the thread, and a strip above it saying where the app is.
 //
-// - The app's URL comes from `GET /api/config` (`app_url`), checked with the same raw-string rule
-//   Zeo applies (`isLocalHttpUrl`); until it answers, the pane says it is waiting, and a failed
-//   read is retried on the link's backoff schedule.
+// - The app's URL comes from the page's own `zeo-app-url` meta, written by the panel server, so the
+//   iframe exists before the document's `load` and its first load is part of the page's (R6.7);
+//   without a usable meta, from `GET /api/config` (`app_url`). Either is checked with the same
+//   raw-string rule Zeo applies (`isLocalHttpUrl`); until the API answers, the pane says it is
+//   waiting, and a failed read is retried on the link's backoff schedule.
 // - G13: the iframe carries `allow-scripts` and `allow-same-origin`, which let a same-origin
 //   frame lift its own sandbox. That is safe only because the app's origin is not the panel's
 //   (D2), so the two are compared first; if they are equal the pane shows an error and no iframe
@@ -30,6 +32,12 @@ const configAnswer = z.object({
   app_url: z.string().refine(isLocalHttpUrl, { message: "app_url is not a local http URL" }),
   root: z.string(),
 });
+
+/** The app's URL the panel server wrote into the page, or `null` when it is absent or unusable. */
+function pageAppUrl(doc: Document): string | null {
+  const value = doc.querySelector('meta[name="zeo-app-url"]')?.getAttribute("content") ?? "";
+  return value !== "" && isLocalHttpUrl(value) ? value : null;
+}
 
 /** The app's URL from the panel server, or `null` when it cannot be read now. */
 async function readAppUrl(log: Logger): Promise<string | null> {
@@ -130,7 +138,14 @@ export function mountAppFrame(
     tries += 1;
     setTimeout(() => void load(), retryDelay(tries));
   };
-  void load();
+
+  // Synchronously when the page carries the URL, so the iframe is part of the page's own load.
+  const preset = pageAppUrl(doc);
+  if (preset !== null) {
+    create(preset);
+  } else {
+    void load();
+  }
 
   return { frame: () => frame };
 }
