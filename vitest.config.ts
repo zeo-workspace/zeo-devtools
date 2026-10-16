@@ -5,7 +5,9 @@ export default defineConfig({
     watch: false,
     environment: "node",
     include: ["test/**/*.test.ts"],
-    exclude: ["test/fixtures/**", "e2e/**", "node_modules/**"],
+    // The packaged-sourcemap check reads dist/, which `npm test` does not build: it runs in
+    // `npm run test:package` (vitest.package.config.ts), after the build.
+    exclude: ["test/fixtures/**", "e2e/**", "node_modules/**", "test/package-sourcemaps.test.ts"],
     // CI=true turns Vite's terminal colours on, and an ANSI reset between "Local" and ":" breaks
     // tests that read Vite's printed URLs; the suite asserts text, not colour.
     env: { NO_COLOR: "1", FORCE_COLOR: "0" },

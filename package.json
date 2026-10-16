@@ -36,6 +36,7 @@
     "lint": "eslint src test e2e scripts",
     "format:check": "prettier --check src test e2e scripts",
     "test": "vitest run",
+    "test:package": "npm run build && vitest run --config vitest.package.config.ts",
     "e2e": "npm run build && playwright test",
     "prepack": "npm run build"
   },

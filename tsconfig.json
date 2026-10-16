@@ -14,6 +14,6 @@
       "@axe-core/playwright": ["./node_modules/@axe-core/playwright/dist/index.d.mts"]
     }
   },
-  "include": ["src/**/*.ts", "test/**/*.ts", "e2e/**/*.ts", "playwright.config.ts", "vitest.config.ts"],
+  "include": ["src/**/*.ts", "test/**/*.ts", "e2e/**/*.ts", "playwright.config.ts", "vitest.config.ts", "vitest.package.config.ts"],
   "exclude": ["node_modules", "dist", "test/fixtures"]
 }
