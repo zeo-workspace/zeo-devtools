@@ -53,6 +53,11 @@ export interface Session {
    * `subscribe` sent is re-sent after every reconnect.
    */
   send(msg: object): boolean;
+  /**
+   * Forgets the last `subscribe`, so a reconnect re-sends only `hello` — for a thread Zeo said no
+   * longer exists, which would otherwise be re-subscribed, and refused, on every reconnect.
+   */
+  unbind(): void;
   /** Calls `fn` for every server message of `kind`; `"*"` receives every message. */
   on(kind: string, fn: (msg: ServerMessage) => void): void;
   /** Calls `fn` on every state change. */
@@ -67,7 +72,8 @@ const consoleLogger: SessionLogger = {
 };
 
 /** A log value as-is, or JSON-quoted when it would break the `key=value` line apart. */
-const logValue = (value: string) => (/^[^\s"=]+$/.test(value) ? value : JSON.stringify(value));
+export const logValue = (value: string) =>
+  /^[^\s"=]+$/.test(value) ? value : JSON.stringify(value);
 
 /** The `client=… root=…` part of every line of a session. */
 function sessionFields(hello: Hello): string {
@@ -174,6 +180,10 @@ class ZeoSession implements Session {
     }
     socket.write(line);
     return true;
+  }
+
+  unbind(): void {
+    this.bound = undefined;
   }
 
   on(kind: string, fn: (msg: ServerMessage) => void): void {
@@ -402,6 +412,7 @@ class ZeoSession implements Session {
 const closedSession = (): Session => ({
   state: "closed",
   send: () => false,
+  unbind: () => {},
   on: () => {},
   onState: () => {},
   close: () => {},
