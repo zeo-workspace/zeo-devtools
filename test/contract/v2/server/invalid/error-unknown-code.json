@@ -1,0 +1,9 @@
+{
+  "$expect": "bad_request",
+  "v": 2,
+  "kind": "error",
+  "id": "r1",
+  "error": "notfound",
+  "message": "m",
+  "fatal": false
+}

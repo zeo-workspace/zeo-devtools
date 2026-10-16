@@ -1,0 +1,13 @@
+{
+  "v": 2,
+  "kind": "created",
+  "id": "c1",
+  "thread": {
+    "thread_id": "5f0c2a9e-7b1d-4c3a-9e4f-2d8b6a1c0e7f",
+    "title": "New thread",
+    "project": "/home/dev/app",
+    "agent": "Claude Agent",
+    "status": "idle",
+    "followed": false
+  }
+}

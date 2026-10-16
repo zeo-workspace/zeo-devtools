@@ -1,0 +1,11 @@
+{
+  "$expect": "bad_request",
+  "v": 2,
+  "kind": "hello",
+  "id": "h1",
+  "client": {
+    "kind": "panel",
+    "root": "/home/dev/app",
+    "app_url": "http://localhost:5173"
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "v": 2,
+  "kind": "hello",
+  "id": "h1",
+  "client": {
+    "kind": "dev_server",
+    "root": "/home/dev/app",
+    "app_url": "HTTP://LOCALHOST:5173/app/",
+    "panel_url": "http://localhost:5174"
+  }
+}

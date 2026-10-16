@@ -1,0 +1,7 @@
+{
+  "v": 2,
+  "kind": "error",
+  "error": "ai_disabled",
+  "message": "AI is disabled in Zeo",
+  "fatal": false
+}

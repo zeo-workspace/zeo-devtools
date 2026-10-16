@@ -1,0 +1,9 @@
+{
+  "v": 2,
+  "kind": "hello",
+  "id": "h1",
+  "client": {
+    "kind": "panel",
+    "root": "/home/dev/app"
+  }
+}

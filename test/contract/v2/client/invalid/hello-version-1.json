@@ -1,0 +1,10 @@
+{
+  "$expect": "unsupported_version",
+  "v": 1,
+  "kind": "hello",
+  "id": "h1",
+  "client": {
+    "kind": "panel",
+    "root": "/home/dev/app"
+  }
+}

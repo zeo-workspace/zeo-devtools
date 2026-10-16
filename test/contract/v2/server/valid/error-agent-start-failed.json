@@ -1,0 +1,8 @@
+{
+  "v": 2,
+  "kind": "error",
+  "id": "c1",
+  "error": "agent_start_failed",
+  "message": "The agent could not start in Zeo",
+  "fatal": false
+}

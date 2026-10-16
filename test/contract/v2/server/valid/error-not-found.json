@@ -1,0 +1,8 @@
+{
+  "v": 2,
+  "kind": "error",
+  "id": "r2",
+  "error": "not_found",
+  "message": "Zeo has no such thread for this project",
+  "fatal": false
+}

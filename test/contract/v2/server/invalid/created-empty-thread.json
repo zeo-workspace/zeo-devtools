@@ -1,0 +1,7 @@
+{
+  "$expect": "bad_request",
+  "v": 2,
+  "kind": "created",
+  "id": "c1",
+  "thread": {}
+}

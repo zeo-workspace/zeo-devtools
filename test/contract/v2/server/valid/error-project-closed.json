@@ -1,0 +1,8 @@
+{
+  "v": 2,
+  "kind": "error",
+  "id": "c1",
+  "error": "project_closed",
+  "message": "This project is not open in Zeo",
+  "fatal": false
+}

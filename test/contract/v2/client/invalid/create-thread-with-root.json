@@ -1,0 +1,7 @@
+{
+  "$expect": "bad_request",
+  "v": 2,
+  "kind": "create_thread",
+  "id": "c1",
+  "root": "/other"
+}

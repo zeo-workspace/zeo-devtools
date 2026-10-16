@@ -1,0 +1,6 @@
+{
+  "$expect": "bad_request",
+  "v": 2,
+  "kind": "project_closed",
+  "root": "/home/dev/app"
+}
