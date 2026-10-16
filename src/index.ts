@@ -7,7 +7,7 @@ import { existsSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join, posix, resolve as resolvePath } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { version as viteVersion, type Plugin, type ResolvedConfig } from "vite";
+import { version as viteVersion, type Plugin, type ResolvedConfig, type ViteDevServer } from "vite";
 import { z } from "zod";
 import {
   isUnder,
@@ -21,6 +21,8 @@ import {
   tagAstroModuleOutcome,
   type AstroCompiler,
 } from "./astro-tagger.js";
+import { startPanelServer, type PanelServer } from "./panel-server.js";
+import { announce, logValue, type Session, type SessionLogger } from "./session.js";
 import { resolveSocketPath, sendToZeo } from "./socket.js";
 import { DEFAULT_EXCLUDE, tagModule } from "./tagger.js";
 
@@ -34,6 +36,10 @@ const optionsSchema = z
     exclude: z.array(z.string().min(1)).optional(),
     /** Default `true`: the first send in a tab asks to share it, for an element screenshot. */
     screenshot: z.boolean().optional(),
+    /** The devtools panel's port on the app's host; a free port when unset (story 055, R3.1). */
+    panelPort: z.number().int().min(1024).max(65535).optional(),
+    /** Default `true`: serve the devtools panel and announce the dev server to Zeo (R2.1). */
+    panel: z.boolean().optional(),
   })
   .optional();
 
@@ -101,9 +107,6 @@ const JSX_ID = /\.[jt]sx(?:$|\?)/;
 const ASTRO_ID = /\.astro(?:$|\?)/;
 const ASTRO_COMPILER = "@astrojs/compiler-rs";
 
-/** A log value as-is, or JSON-quoted when it would break the `key=value` line apart. */
-const logValue = (value: string) => (/^[^\s"=]+$/.test(value) ? value : JSON.stringify(value));
-
 /** A compiler copy that could be used, or why none could. */
 type LoadedCompiler =
   | { compiler: AstroCompiler }
@@ -170,6 +173,164 @@ interface AstroState {
   compiler: Promise<AstroCompiler | undefined>;
   /** Files already reported as `astro_parse_failed` by this server. */
   parseFailed: Set<string>;
+}
+
+/** How long to wait for `server.resolvedUrls` after `listening`, in 10 ms steps (Vite < 7). */
+const URL_WAIT_STEPS = 200;
+
+/**
+ * Vite's resolved local URL, once there is one. Vite 8 fills `resolvedUrls` in a `listening`
+ * listener it prepends, so it is already set here; older Vite sets it only after `listen()`'s
+ * own await, a few ticks later, so the wait is bounded rather than assumed (GOTCHA G2).
+ */
+async function resolvedLocalUrl(
+  server: ViteDevServer,
+  stopped: () => boolean,
+): Promise<string | undefined> {
+  for (let step = 0; server.resolvedUrls === null && step < URL_WAIT_STEPS; step++) {
+    if (stopped()) {
+      return undefined;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  return server.resolvedUrls?.local[0];
+}
+
+/**
+ * Starts the devtools panel (A1) and the announce session (A2) once `server` listens, prints the
+ * panel URL beside Vite's own, and stops both with the server (story 055, design.md §A6). Never
+ * throws: whatever stops the panel is one log line, and the dev server keeps serving the app.
+ */
+function wirePanel(
+  server: ViteDevServer,
+  options: { panelPort?: number; socketPath?: string },
+): void {
+  const vite = server.config.logger;
+  // Vite's logger, so session and panel lines land in the dev server's own output.
+  const logger: SessionLogger = {
+    info: (msg) => vite.info(msg),
+    warn: (msg) => vite.warn(msg),
+  };
+  const httpServer = server.httpServer;
+  if (httpServer === null) {
+    // GOTCHA G2: in middleware mode the host app owns the HTTP server, and no URL is Vite's.
+    logger.warn(
+      "zeo-devtools event=panel_disabled reason=middleware_mode " +
+        `hint=${logValue("the devtools panel needs Vite's own HTTP server (server.middlewareMode is set)")}`,
+    );
+    return;
+  }
+
+  const root = server.config.root;
+  let stopped = false;
+  let session: Session | undefined;
+  /** The running panel, once its port is bound and the announce is open. */
+  let running: PanelServer | undefined;
+  let starting: Promise<PanelServer | undefined> | undefined;
+
+  /** The panel server at `appUrl`'s host, or `undefined` once its failure is logged. */
+  const startPanel = async (appUrl: string): Promise<PanelServer | undefined> => {
+    const port = options.panelPort;
+    try {
+      return await startPanelServer({
+        host: new URL(appUrl).hostname,
+        port,
+        appUrl,
+        root,
+        zeo: { socketPath: options.socketPath },
+        logger,
+      });
+    } catch (error: unknown) {
+      const cause =
+        error instanceof Error ? (error.cause as NodeJS.ErrnoException | undefined) : undefined;
+      if (cause?.code === "EADDRINUSE" && port !== undefined) {
+        // An explicit port is a promise to the operator: no silent move to another one. With
+        // `panelPort` unset the server already binds a free port, so this needs one set (R3.1).
+        logger.warn(
+          `zeo-devtools event=panel_error reason=panel_port_in_use port=${port} ` +
+            `hint=${logValue("choose another panelPort, or leave it unset for a free port")}`,
+        );
+        return undefined;
+      }
+      logger.warn(
+        `zeo-devtools event=panel_error reason=panel_start_failed root=${logValue(root)} ` +
+          `error=${logValue(error instanceof Error ? error.message : "error")}`,
+      );
+      return undefined;
+    }
+  };
+
+  const start = async (): Promise<PanelServer | undefined> => {
+    const appUrl = await resolvedLocalUrl(server, () => stopped);
+    if (stopped) {
+      return undefined;
+    }
+    if (appUrl === undefined) {
+      logger.warn(
+        `zeo-devtools event=panel_disabled reason=no_local_url ` +
+          `hint=${logValue("Vite resolved no local URL for the app (see server.host)")}`,
+      );
+      return undefined;
+    }
+    const panel = await startPanel(appUrl);
+    if (panel === undefined) {
+      return undefined;
+    }
+    if (stopped) {
+      // The dev server closed while the panel was starting.
+      await panel.close();
+      return undefined;
+    }
+    running = panel;
+    // R2.1: the app URL exactly as Vite resolved it, base path and trailing slash included.
+    session = announce(root, appUrl, panel.url, { logger, socketPath: options.socketPath });
+    return panel;
+  };
+
+  let stopping: Promise<void> | undefined;
+  const stop = (): Promise<void> => {
+    stopping ??= (async () => {
+      stopped = true;
+      session?.close();
+      session = undefined;
+      const panel = await starting;
+      await panel?.close();
+    })();
+    return stopping;
+  };
+
+  httpServer.once("listening", () => {
+    // `start` logs every failure itself and never rejects.
+    starting ??= start();
+  });
+  // A restart closes the old HTTP server without calling `server.close` (R3.7).
+  httpServer.once("close", () => void stop());
+
+  const printUrls = server.printUrls;
+  server.printUrls = () => {
+    printUrls.call(server);
+    const line = (panel: PanelServer | undefined) => {
+      if (panel !== undefined && !stopped) {
+        logger.info(`  ➜  Zeo panel: ${panel.url}`);
+      }
+    };
+    if (running !== undefined) {
+      line(running);
+    } else {
+      // Vite's CLI prints right after `listen()`, possibly before the panel has a port.
+      void starting?.then(line);
+    }
+  };
+
+  const close = server.close;
+  server.close = async () => {
+    const ending = stop();
+    try {
+      await close.call(server);
+    } finally {
+      await ending;
+    }
+  };
 }
 
 export function zeo(options?: ZeoPluginOptions): Plugin[] {
@@ -360,6 +521,12 @@ export function zeo(options?: ZeoPluginOptions): Plugin[] {
             `hint=${logValue("zeo() is registered more than once; only the first copy relays picks")}`,
         );
         return;
+      }
+      // Story 055: the panel and the announce, from this relay so zeo() stays three plugins and
+      // a second copy starts nothing. Never in Vitest's mode (R2.6); `apply: "serve"` already
+      // keeps all of it out of `vite build`.
+      if (opts?.panel !== false && server.config.mode !== "test") {
+        wirePanel(server, { panelPort: opts?.panelPort, socketPath: opts?.socketPath });
       }
       if (!relayEnabled) {
         logger.warn(

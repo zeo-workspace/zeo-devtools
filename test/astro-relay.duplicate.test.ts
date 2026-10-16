@@ -144,8 +144,8 @@ describe("one pick, one request to Zeo (R2.5)", () => {
     const zeoFake = await fake();
     zeoFake.reply = { kind: "json", value: okInserted(1) };
     const run = await pickOnce([
-      ...zeo({ socketPath: zeoFake.path }),
-      ...zeo({ socketPath: zeoFake.path }),
+      ...zeo({ socketPath: zeoFake.path, panel: false }),
+      ...zeo({ socketPath: zeoFake.path, panel: false }),
     ]);
     expect(run.results).toEqual([okInserted(1)]);
     expect(zeoFake.requests).toHaveLength(1);
@@ -160,7 +160,7 @@ describe("one pick, one request to Zeo (R2.5)", () => {
   it("hostile: zeoAstro()'s plugins next to an existing zeo() send the pick once", async () => {
     const zeoFake = await fake();
     const run = await pickOnce([
-      ...zeo({ socketPath: zeoFake.path }),
+      ...zeo({ socketPath: zeoFake.path, panel: false }),
       ...zeoAstroPlugins({ socketPath: zeoFake.path }),
     ]);
     expect(run.results).toEqual([okInserted(1)]);
@@ -170,7 +170,7 @@ describe("one pick, one request to Zeo (R2.5)", () => {
 
   it("a single registration relays the pick and logs no duplicate warning", async () => {
     const zeoFake = await fake();
-    const run = await pickOnce(zeo({ socketPath: zeoFake.path }));
+    const run = await pickOnce(zeo({ socketPath: zeoFake.path, panel: false }));
     expect(run.results).toEqual([okInserted(1)]);
     expect(zeoFake.requests).toHaveLength(1);
     expect(duplicateLines(run.logs)).toHaveLength(0);

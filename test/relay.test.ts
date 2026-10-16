@@ -173,7 +173,7 @@ const selectLines = (logs: LogLine[]) =>
 describe("client injection (design §A2 interface)", () => {
   it("index.html loads /@zeo-devtools/client as a module, and the module is served", async () => {
     const zeoFake = await fake();
-    const s = await stack(zeo({ socketPath: zeoFake.path }));
+    const s = await stack(zeo({ socketPath: zeoFake.path, panel: false }));
     const html = await (await fetch(`http://127.0.0.1:${s.port}/`)).text();
     expect(html).toMatch(/<script[^>]*type="module"[^>]*\/@zeo-devtools\/client/);
     const mod = await fetch(`http://127.0.0.1:${s.port}/@zeo-devtools/client`);
@@ -186,7 +186,7 @@ describe("forwarding (R6.1)", () => {
   it("forwards one request with project_root and absolute item paths, and relays the answer", async () => {
     const zeoFake = await fake();
     zeoFake.reply = { kind: "json", value: okInserted(1) };
-    const s = await stack(zeo({ socketPath: zeoFake.path }));
+    const s = await stack(zeo({ socketPath: zeoFake.path, panel: false }));
     const page = await Hmr.open(s);
 
     const result = await select(page, pageSelection());
@@ -207,7 +207,7 @@ describe("forwarding (R6.1)", () => {
 
   it("hostile converse: a path that stays inside the root after `..` is forwarded, normalized", async () => {
     const zeoFake = await fake();
-    const s = await stack(zeo({ socketPath: zeoFake.path }));
+    const s = await stack(zeo({ socketPath: zeoFake.path, panel: false }));
     const page = await Hmr.open(s);
     await select(page, pageSelection([pageItem("src/../src/App.tsx")]));
     const sent = zeoFake.requests[0] as { items: Array<{ src: { file: string } }> };
@@ -216,7 +216,7 @@ describe("forwarding (R6.1)", () => {
 
   it("hostile: paths escaping the root are refused locally, including a string-prefix sibling", async () => {
     const zeoFake = await fake();
-    const s = await stack(zeo({ socketPath: zeoFake.path }));
+    const s = await stack(zeo({ socketPath: zeoFake.path, panel: false }));
     const page = await Hmr.open(s);
     for (const file of ["../app2/secret.tsx", "../../../../etc/passwd", "/etc/passwd"]) {
       const result = await select(page, pageSelection([pageItem(file)]));
@@ -231,7 +231,7 @@ describe("forwarding (R6.1)", () => {
     cleanups.push(async () => {
       vi.unstubAllEnvs();
     });
-    const s = await stack(zeo());
+    const s = await stack(zeo({ panel: false }));
     const page = await Hmr.open(s);
     expect(await select(page, pageSelection())).toEqual(okInserted(1));
     expect(zeoFake.requests).toHaveLength(1);
@@ -247,7 +247,7 @@ describe("forwarding (R6.1)", () => {
     cleanups.push(async () => {
       vi.unstubAllEnvs();
     });
-    const s = await stack(zeo());
+    const s = await stack(zeo({ panel: false }));
     const page = await Hmr.open(s);
     expect(await select(page, pageSelection())).toEqual(okInserted(1));
     expect(zeoFake.requests).toHaveLength(1);
@@ -259,7 +259,7 @@ describe("forwarding (R6.1)", () => {
     cleanups.push(async () => {
       vi.unstubAllEnvs();
     });
-    const s = await stack(zeo());
+    const s = await stack(zeo({ panel: false }));
     const page = await Hmr.open(s);
     const result = await select(page, pageSelection());
     expect(result).toMatchObject({ ok: false });
@@ -270,7 +270,7 @@ describe("forwarding (R6.1)", () => {
 describe("the answer goes to the sender only (R6.2)", () => {
   it("hostile: the sender gets it and another connected tab does not — both ways", async () => {
     const zeoFake = await fake();
-    const s = await stack(zeo({ socketPath: zeoFake.path }));
+    const s = await stack(zeo({ socketPath: zeoFake.path, panel: false }));
     const a = await Hmr.open(s);
     const b = await Hmr.open(s);
 
@@ -289,7 +289,7 @@ describe("the answer goes to the sender only (R6.2)", () => {
 describe("Zeo's answers and failures reach the page (R6.3, R9.12)", () => {
   it("relays every Zeo error code with its message", async () => {
     const zeoFake = await fake();
-    const s = await stack(zeo({ socketPath: zeoFake.path }));
+    const s = await stack(zeo({ socketPath: zeoFake.path, panel: false }));
     const page = await Hmr.open(s);
     for (const error of [
       "no_window",
@@ -316,7 +316,7 @@ describe("Zeo's answers and failures reach the page (R6.3, R9.12)", () => {
     const zeoFake = await fake();
     const path = zeoFake.path;
     await zeoFake.stop();
-    const s = await stack(zeo({ socketPath: path }));
+    const s = await stack(zeo({ socketPath: path, panel: false }));
     const page = await Hmr.open(s);
     expect(await select(page, pageSelection())).toMatchObject({
       v: 1,
@@ -330,7 +330,7 @@ describe("Zeo's answers and failures reach the page (R6.3, R9.12)", () => {
 describe("validation in the dev server (R6.5)", () => {
   it("an invalid request is answered with the reason and nothing reaches Zeo", async () => {
     const zeoFake = await fake();
-    const s = await stack(zeo({ socketPath: zeoFake.path }));
+    const s = await stack(zeo({ socketPath: zeoFake.path, panel: false }));
     const page = await Hmr.open(s);
     for (const bad of [
       pageSelection([]),
@@ -350,7 +350,7 @@ describe("validation in the dev server (R6.5)", () => {
 describe("the relay never throws into Vite (R6.6, Q4)", () => {
   it("answers garbage with an error and keeps serving", async () => {
     const zeoFake = await fake();
-    const s = await stack(zeo({ socketPath: zeoFake.path }));
+    const s = await stack(zeo({ socketPath: zeoFake.path, panel: false }));
     const page = await Hmr.open(s);
     for (const garbage of [null, "garbage", 42, [], { v: 1, items: "x" }]) {
       expect(await select(page, garbage), JSON.stringify(garbage)).toMatchObject({ ok: false });
@@ -368,7 +368,7 @@ describe("logging (R12.1, R12.3)", () => {
   it("one key=value line per request with count, screenshot size, outcome and duration", async () => {
     const zeoFake = await fake();
     zeoFake.reply = { kind: "json", value: okInserted(2) };
-    const s = await stack(zeo({ socketPath: zeoFake.path }));
+    const s = await stack(zeo({ socketPath: zeoFake.path, panel: false }));
     const page = await Hmr.open(s);
     const items = [
       pageItem("src/App.tsx", "SECRET-DOM-TEXT", { "aria-label": "SECRET-ATTR" }),
@@ -415,7 +415,7 @@ describe("Vite older than 6.0.9 (R6.7)", () => {
     });
     const { zeo: zeoUnderVersion } = await import("../src/index.js");
     const zeoFake = await fake();
-    const s = await stack(zeoUnderVersion({ socketPath: zeoFake.path }));
+    const s = await stack(zeoUnderVersion({ socketPath: zeoFake.path, panel: false }));
     return { s, zeoFake, page: await Hmr.open(s) };
   }
 

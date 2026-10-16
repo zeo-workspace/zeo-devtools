@@ -243,6 +243,8 @@ describe("reconnect (R2.5)", () => {
     await first.waitForLine((m) => m.kind === "subscribe");
     await fake!.restart();
     const second = await fake!.waitForConn((c) => c.n > first.n, 5000);
+    // The connection resolves on connect; wait for its first line before reading it.
+    await second.waitForLine((m) => m.kind === "hello", 3000);
     expect(second.lines[0]).toMatchObject({ kind: "hello", client: { kind: "panel", root: ROOT } });
     const sub = await second.waitForLine((m) => m.kind === "subscribe", 3000);
     expect(sub).toMatchObject({ target: { thread_id: "t-bound" } });
