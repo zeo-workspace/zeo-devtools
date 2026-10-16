@@ -6,6 +6,8 @@
 // exactly, so they live in one place.
 export const TEXT = {
   unreachable: "Zeo is not running, or its devtools bridge is off",
+  // The panel's own server does not answer (R3.8): Zeo stopped the dev server, or it died.
+  serverStopped: "The dev server stopped. Start devtools from Zeo to continue.",
   tooOld: "This Zeo does not support the devtools panel",
   tooManyPanels: "Too many devtools panels are open — close one to continue",
   projectClosed: "Open this project in Zeo to continue",

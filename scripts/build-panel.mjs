@@ -80,8 +80,8 @@ async function main() {
       // Minified for the browser to parse; the linked map keeps stacks and devtools readable.
       minify: true,
       sourcemap: "linked",
-      // Map positions only: the sources are public already and would triple the package size.
-      sourcesContent: false,
+      // Self-contained map (Q19): the package ships no `src/`, so the sources ride in the map.
+      sourcesContent: true,
       legalComments: "none",
       metafile: true,
       logLevel: "warning",

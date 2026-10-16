@@ -25,7 +25,8 @@
 // `503 { error: "zeo_unreachable" }` while the session is not open and queues nothing (R6.8).
 //
 // Logs are `key=value` lines naming the root, never message text, header values or panel ids
-// (R9.1, R9.2). No handler throws past its own catch: a failure answers, and the server keeps
+// (R9.1, R9.2): a thread action names its panel by a per-server sequence number (`panel=3`), and
+// the thread it concerns (`event=panel_create_thread`, `event=panel_send`, design.md §A1 v3). No handler throws past its own catch: a failure answers, and the server keeps
 // serving the page (R9.3).
 import { Buffer } from "node:buffer";
 import { randomUUID } from "node:crypto";
@@ -78,6 +79,8 @@ export const UNCLAIMED_PANEL_MS = 30_000;
 export const FATAL_GRACE_MS = 5_000;
 /** How many recent `subscribe` wire ids a panel maps back to the page's own ids. */
 const SUBSCRIBE_IDS_KEPT = 8;
+/** How many unanswered `create_thread` wire ids a panel remembers, to log Zeo's answer. */
+const CREATE_IDS_KEPT = 8;
 /**
  * Bytes an SSE stream may have queued unsent before it is dropped. A page that stopped reading
  * would otherwise make the server buffer every message of its session; the page recovers by
@@ -130,7 +133,16 @@ interface Panel {
   /** Ended by a fatal error before its stream opened: only that error is left to deliver. */
   held: boolean;
   closed: boolean;
+  /** The panel in log lines: a sequence number of this server, never the panel's id (R9.2). */
+  readonly tag: number;
+  /** The thread Zeo last answered a `subscribe` of this panel with: where a `send` goes. */
+  thread: string | undefined;
+  /** Wire ids of `create_thread` requests Zeo has not answered yet, oldest first. */
+  creates: Set<string>;
 }
+
+/** The outcome of a thread action, as logged. */
+type ActionOutcome = "created" | "forwarded" | "error" | "zeo_unreachable";
 
 type RefusalReason = "host" | "origin" | "fetch_site";
 
@@ -432,6 +444,33 @@ function writeEvent(res: ServerResponse, event: string, data: unknown): boolean 
 const errorCode = (value: unknown): string =>
   typeof value === "string" && /^[a-z_]{1,32}$/.test(value) ? value : "other";
 
+/** Drops the oldest keys of an insertion-ordered `Map` or `Set` until at most `max` are left. */
+function keepNewest(keys: Map<string, unknown> | Set<string>, max: number): void {
+  for (const old of keys.keys()) {
+    if (keys.size <= max) {
+      break;
+    }
+    keys.delete(old);
+  }
+}
+
+/** The longest thread id written to a log line; a longer one is not a thread id Zeo makes. */
+const MAX_LOGGED_THREAD_ID = 128;
+
+/** A thread id from Zeo as it may appear in a log line, or `undefined` when it cannot. */
+const loggedThreadId = (value: unknown): string | undefined =>
+  typeof value === "string" && value !== "" && value.length <= MAX_LOGGED_THREAD_ID
+    ? value
+    : undefined;
+
+/** The `thread_id` of a `snapshot` or `created` message's `thread`, when it can be logged. */
+const messageThreadId = (msg: ServerMessage): string | undefined => {
+  const thread = msg.thread;
+  return typeof thread === "object" && thread !== null
+    ? loggedThreadId((thread as { thread_id?: unknown }).thread_id)
+    : undefined;
+};
+
 /** The wire form (0058) of a panel request: `v`, an `id`, and `subscribe` by `target`. */
 function toWire(msg: PanelClientMsg, id: string): Record<string, unknown> {
   if (msg.kind === "subscribe") {
@@ -498,6 +537,8 @@ export async function startPanelServer(options: PanelServerOptions): Promise<Pan
   const csp = contentSecurityPolicy(appOrigin);
   const rootField = `root=${logValue(root)}`;
   const panels = new Map<string, Panel>();
+  /** Panels opened so far: the next panel's log tag. */
+  let panelCount = 0;
   /** Set once the port is known; until then no request can have arrived. */
   let expectedHost = "";
   let panelOrigin = "";
@@ -519,6 +560,52 @@ export async function startPanelServer(options: PanelServerOptions): Promise<Pan
       return false;
     }
     return true;
+  };
+
+  /**
+   * One `event=panel_create_thread` or `event=panel_send` line (R9.1): the panel's tag, the thread
+   * the action concerns when there is one, the outcome — never the text (R9.2).
+   */
+  const logAction = (
+    event: "panel_create_thread" | "panel_send",
+    panel: Panel,
+    outcome: ActionOutcome,
+    thread: string | undefined,
+    code?: string,
+  ) => {
+    const fields = [
+      `zeo-devtools event=${event}`,
+      `panel=${panel.tag}`,
+      ...(thread === undefined ? [] : [`thread=${logValue(thread)}`]),
+      `outcome=${outcome}`,
+      ...(code === undefined ? [] : [`code=${code}`]),
+      rootField,
+    ];
+    const ok = outcome === "created" || outcome === "forwarded";
+    (ok ? logger.info : logger.warn)(fields.join(" "));
+  };
+
+  /** Logs a thread action refused because the panel's session is not open (503). */
+  const logRefusedAction = (panel: Panel, msg: PanelClientMsg) => {
+    if (msg.kind === "send") {
+      logAction("panel_send", panel, "zeo_unreachable", panel.thread);
+    } else if (msg.kind === "create_thread") {
+      logAction("panel_create_thread", panel, "zeo_unreachable", undefined);
+    }
+  };
+
+  /** Logs Zeo's answer to a `create_thread` of this panel, when `msg` is one. */
+  const logCreateAnswer = (panel: Panel, msg: ServerMessage, wireId: string | undefined) => {
+    if (wireId === undefined || !panel.creates.has(wireId)) {
+      return;
+    }
+    if (msg.kind === "created") {
+      panel.creates.delete(wireId);
+      logAction("panel_create_thread", panel, "created", messageThreadId(msg));
+    } else if (msg.kind === "error") {
+      panel.creates.delete(wireId);
+      logAction("panel_create_thread", panel, "error", undefined, errorCode(msg.error));
+    }
   };
 
   const closePanel = (id: string, panel: Panel) => {
@@ -555,6 +642,9 @@ export async function startPanelServer(options: PanelServerOptions): Promise<Pan
       subscribeIds: new Map(),
       held: false,
       closed: false,
+      tag: ++panelCount,
+      thread: undefined,
+      creates: new Set(),
     };
     panel.unclaimed = setTimeout(() => {
       logger.info(`zeo-devtools event=panel_closed reason=unclaimed ${rootField}`);
@@ -617,6 +707,11 @@ export async function startPanelServer(options: PanelServerOptions): Promise<Pan
       return;
     }
     const wireId = typeof msg.id === "string" ? msg.id : undefined;
+    if (msg.kind === "snapshot" && wireId !== undefined && wireId === panel.subscribeId) {
+      // The answer to the panel's current `subscribe`: the thread its sends now go to.
+      panel.thread = messageThreadId(msg);
+    }
+    logCreateAnswer(panel, msg, wireId);
     const pageId = wireId === undefined ? undefined : panel.subscribeIds.get(wireId);
     const frame = sseFrame(msg.kind, pageId === undefined ? msg : { ...msg, id: pageId });
     if (frame === undefined) {
@@ -635,6 +730,7 @@ export async function startPanelServer(options: PanelServerOptions): Promise<Pan
       // The bound thread is gone (R5.8): a reconnect must not subscribe it again.
       panel.session.unbind();
       panel.subscribeId = undefined;
+      panel.thread = undefined;
     }
     (fatal ? logger.warn : logger.info)(
       `zeo-devtools event=zeo_error code=${code} fatal=${fatal} ${rootField}`,
@@ -666,12 +762,14 @@ export async function startPanelServer(options: PanelServerOptions): Promise<Pan
       if (subscribe) {
         panel.subscribeId = id;
         panel.subscribeIds.set(id, msg.id);
-        for (const old of panel.subscribeIds.keys()) {
-          if (panel.subscribeIds.size <= SUBSCRIBE_IDS_KEPT) {
-            break;
-          }
-          panel.subscribeIds.delete(old);
-        }
+        keepNewest(panel.subscribeIds, SUBSCRIBE_IDS_KEPT);
+      } else if (msg.kind === "create_thread") {
+        // Logged when Zeo answers: the line names the thread Zeo created.
+        panel.creates.delete(id);
+        panel.creates.add(id);
+        keepNewest(panel.creates, CREATE_IDS_KEPT);
+      } else if (msg.kind === "send") {
+        logAction("panel_send", panel, "forwarded", panel.thread);
       }
       res.writeHead(204);
       res.end();
@@ -679,6 +777,7 @@ export async function startPanelServer(options: PanelServerOptions): Promise<Pan
     }
     // The session refuses only when not open: the contract caps every request (a `send` at
     // 100 000 characters) far below a frame, and the 8 MiB body cap holds the rest.
+    logRefusedAction(panel, msg);
     sendJson(res, 503, { error: "zeo_unreachable" });
   };
 
@@ -827,6 +926,7 @@ export async function startPanelServer(options: PanelServerOptions): Promise<Pan
     }
     if (panel.session.state !== "open") {
       // Nothing is queued: a later replay would deliver what the operator was told failed.
+      logRefusedAction(panel, msg.value);
       sendJson(res, 503, { error: "zeo_unreachable" });
       return;
     }

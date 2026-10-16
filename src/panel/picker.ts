@@ -3,9 +3,9 @@
 // panel's root appear here, and there is no follow entry (R5.7).
 //
 // One click handler sits on the list, so a click on a row or on its button is the same choice,
-// and the same guard applies to both: while the picker is disabled (the project is closed, R7.2)
-// nothing is chosen, whatever element was clicked. The rows are rebuilt only while shown, so no
-// hidden title lingers in the page's text.
+// and the same guard applies to both: while the picker is disabled (the project is closed, R7.2,
+// or the panel server stopped, R3.8) nothing is chosen, whatever element was clicked. The rows
+// are rebuilt only while shown, so no hidden title lingers in the page's text.
 import { button } from "./composer.js";
 import { TEXT } from "./text.js";
 import type { ThreadInfo } from "./wire.js";
@@ -19,7 +19,7 @@ export interface PickerHandlers {
 
 export interface PickerState {
   threads: readonly ThreadInfo[];
-  /** Everything is disabled (the project is closed). */
+  /** Everything is disabled (the project is closed, or the panel server stopped). */
   disabled: boolean;
   /** A create is in flight: New thread waits for it. */
   creating: boolean;

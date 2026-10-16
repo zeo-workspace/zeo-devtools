@@ -10,19 +10,25 @@
 //   subscribed whenever a panel's stream opens — so a re-created panel re-binds it (R6.9) — and
 //   when Zeo's session opens if the first attempt found it closed (503). Thread events apply only
 //   after a snapshot of that thread (`bound`).
-// - The bound thread's answers: `not_found` drops the binding and shows the list with "This
-//   thread is no longer available" (R5.8); `agent_start_failed`, `busy` and `overloaded` (Zeo's
-//   reload budget is spent, or it is loaded) are shown and retried on the backoff schedule, never
-//   in a tight loop; anything else is shown and the binding kept.
+// - The bound thread's answers, to a subscribe or a send: `not_found` drops the binding and shows
+//   the list with "This thread is no longer available" (R5.8); any other code — `agent_start_failed`
+//   (how Zeo's `load_failed` reaches the wire), `busy`, `overloaded` or anything else — is shown in
+//   the banner and disables the chat for that thread, the binding and the typed text kept (R5.10,
+//   R6.8). A subscribe refused with one of the first three (Zeo's reload budget is spent, or it is
+//   loaded) is retried on the backoff schedule, never in a tight loop; a snapshot of the thread, or
+//   binding another one, ends the refusal.
 // - A bound thread's stream that ends (`thread_closed`: Zeo evicted it, or closed it) is
 //   re-subscribed once on the same panel; ending again before a snapshot falls back to re-creating
 //   the panel, on the link's backoff (design.md §B3 Retention, refine v2).
 // - Project closed (`project_closed`, or an `error project_closed`): the chat, New thread and the
 //   list are disabled and nothing is sent until `project_open`, which re-enables them on the same
 //   page (R7.2, R7.3).
-// - Notices: Zeo too old (R2.7), unreachable while Zeo's session is not open or the panel is being
-//   re-created, too many panels (the server's cap), the reason of a fatal error, the closed
-//   project, and the bound thread's own line.
+// - Panel server stopped (the link's origin probe got no answer, R3.8): like a closed project, the
+//   chat and New thread are disabled and nothing is sent, the typed draft kept, until a re-created
+//   panel's stream opens. An origin that answers keeps the unreachable notice (R3.9).
+// - Notices: Zeo too old (R2.7), the dev server stopped (R3.8), unreachable while Zeo's session is
+//   not open or the panel is being re-created, too many panels (the server's cap), the reason of
+//   a fatal error, the closed project, and the bound thread's own line.
 // - Transcript and requests: entries keyed by index — replaced on update, spliced on removal
 //   (R6.2); `send` (R6.3), `cancel` (R6.4) and `authorize` (R6.5) carry a page id and Zeo's
 //   `sent` / `ok` / `error` for that id arrives on the stream.
@@ -151,8 +157,10 @@ export class PanelView {
   private bound = false;
   private thread: ThreadInfo | null = null;
   private threads: ThreadInfo[] = [];
-  /** A line about the binding itself (gone, a refused subscribe or create). */
+  /** A line about the binding itself (gone, a refused subscribe, send or create). */
   private threadNotice: string | null = null;
+  /** Zeo refused the bound thread's subscribe or send (R5.10): its chat is disabled. */
+  private threadRefused = false;
   private subscribeState: Pending = "none";
   private subscribeId: string | null = null;
   /** Transient subscribe refusals in a row, for the backoff; reset by a snapshot. */
@@ -384,6 +392,7 @@ export class PanelView {
     this.endResent = false;
     this.subscribeRetries = 0;
     this.threadNotice = null;
+    this.threadRefused = false;
     this.resetTranscript(0);
     this.clearPermissions();
     this.renderStatus(null);
@@ -403,6 +412,7 @@ export class PanelView {
     this.endResent = false;
     this.cancelSubscribeRetry();
     this.threadNotice = notice;
+    this.threadRefused = false;
     this.resetTranscript(0);
     this.clearPermissions();
     this.renderStatus(null);
@@ -412,14 +422,14 @@ export class PanelView {
   }
 
   private choose(thread: ThreadInfo): void {
-    if (this.projectClosed) {
+    if (this.locked) {
       return;
     }
     this.bind(thread);
   }
 
   private async createThread(): Promise<void> {
-    if (this.projectClosed || this.creating !== null) {
+    if (this.locked || this.creating !== null) {
       return;
     }
     const id = this.nextId("n");
@@ -541,28 +551,36 @@ export class PanelView {
     // `unknown_panel` and `network`: the link is re-creating the panel, and `onReady` re-sends.
   }
 
+  /** R5.10: on the first subscribe as on a resync, the same rule as on a send. */
   private onSubscribeError(err: PanelEvent<"error">): void {
     this.subscribeState = "none";
     this.resyncing = false;
-    if (err.error === "not_found") {
-      this.dropBinding(TEXT.gone);
-      return;
-    }
-    if (err.error === "project_closed") {
-      // Re-subscribed on `project_open`.
-      return;
-    }
-    this.threadNotice = errorText(err);
+    this.onThreadError(err);
     if (TRANSIENT_SUBSCRIBE_ERRORS.has(err.error)) {
       // Zeo's reload budget for this thread is spent, or it is busy: try again later, backing off.
       const delay = retryDelay(this.subscribeRetries + 1);
       this.subscribeRetries += 1;
       this.subscribeTimer = setTimeout(() => {
         this.subscribeTimer = undefined;
-        if (this.boundThread !== null && !this.bound) {
+        if (this.boundThread !== null && (!this.bound || this.threadRefused)) {
           this.subscribe();
         }
       }, delay);
+    }
+  }
+
+  /**
+   * The bound thread's subscribe or send answered with a Zeo error: `not_found` drops the binding
+   * (R5.8); `project_closed` is the closed project's path, already applied by `onError` and
+   * re-subscribed on `project_open`; any other code goes in the banner and disables the chat for
+   * this thread (R5.10).
+   */
+  private onThreadError(err: PanelEvent<"error">): void {
+    if (err.error === "not_found") {
+      this.dropBinding(TEXT.gone);
+    } else if (err.error !== "project_closed") {
+      this.threadNotice = errorText(err);
+      this.threadRefused = true;
     }
   }
 
@@ -634,7 +652,7 @@ export class PanelView {
   }
 
   private async send(text: string): Promise<void> {
-    if (!this.bound || this.projectClosed) {
+    if (!this.bound || this.locked) {
       return;
     }
     this.composer.setSending(true);
@@ -643,15 +661,19 @@ export class PanelView {
     if (reply.kind === "sent") {
       this.composer.clear();
       this.composer.notify(reply.queued ? TEXT.queued : null);
+    } else if (reply.kind === "error") {
+      // Zeo refused it: the reason is the thread's, in the banner; the text stays (R6.8).
+      this.onThreadError(reply);
+      this.render();
     } else {
-      // The text stays: nothing went out, or Zeo refused it (R6.8).
+      // Nothing went out, or no answer came: the text stays, the reason in the composer (R6.8).
       this.composer.notify(failureText(reply), "error");
     }
     this.composer.setSending(false);
   }
 
   private async stop(): Promise<void> {
-    if (this.projectClosed) {
+    if (this.locked) {
       return;
     }
     this.composer.setStopping(true);
@@ -668,7 +690,7 @@ export class PanelView {
     buttons: HTMLButtonElement[],
     error: HTMLElement,
   ): Promise<void> {
-    if (this.projectClosed) {
+    if (this.locked) {
       return;
     }
     for (const b of buttons) {
@@ -698,19 +720,28 @@ export class PanelView {
   // ---------------------------------------------------------------------------------------------
   // Rendering: header, banner, picker or chat
 
+  /**
+   * Whether chat, New thread and the list are disabled: the project is closed (R7.2), or the
+   * panel server itself stopped (R3.8). Either way nothing is sent and the draft stays.
+   */
+  private get locked(): boolean {
+    return this.projectClosed || this.linkDown === "server_stopped";
+  }
+
   private render(): void {
     this.renderBanner();
     const hasThread = this.boundThread !== null;
     this.picker.render(!hasThread, {
       threads: this.threads,
-      disabled: this.projectClosed,
+      disabled: this.locked,
       creating: this.creating !== null,
     });
     this.transcript.hidden = !hasThread;
     this.chat.hidden = !hasThread;
-    this.composer.setEnabled(this.bound && !this.projectClosed);
-    // Permission answers are chat too: unreachable while the project is closed (R7.2).
-    this.permsEl.inert = this.projectClosed;
+    this.composer.setEnabled(this.bound && !this.locked && !this.threadRefused);
+    // Permission answers are chat too: unreachable while the project is closed (R7.2) or the
+    // server is stopped (R3.8).
+    this.permsEl.inert = this.locked;
   }
 
   private renderHeader(): void {
@@ -728,6 +759,8 @@ export class PanelView {
       tone = "error";
     } else if (this.linkDown === "too_many_panels") {
       lines.push(TEXT.tooManyPanels);
+    } else if (this.linkDown === "server_stopped") {
+      lines.push(TEXT.serverStopped);
     } else if (this.linkDown === "unreachable" || this.conn === "connecting") {
       lines.push(TEXT.unreachable);
     }
@@ -771,6 +804,7 @@ export class PanelView {
     this.subscribeRetries = 0;
     this.subscribeState = "sent";
     this.threadNotice = null;
+    this.threadRefused = false;
     this.resetTranscript(s.earlier);
     for (const entry of s.entries) {
       const node = this.renderEntry(entry);

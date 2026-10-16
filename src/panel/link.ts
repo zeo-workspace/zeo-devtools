@@ -12,6 +12,13 @@
 // session for `STABLE_MS`, so a panel that opens and is ended at once (a fatal error, a thread
 // that keeps closing) backs off instead of looping. A refusal of `POST /api/panels` names its
 // reason: `too_many_panels` (the server's cap of live panels) is not "Zeo is unreachable".
+//
+// A lost stream may mean the panel server itself is gone (design.md §A3 "Own server gone (v3)",
+// R3.8, R3.9): Zeo stops a dev server it started with a signal, and a killed process sends
+// nothing. So a lost stream probes the page's own origin (`GET /api/config`, uncached, 2 s): no
+// answer — a network error or the timeout — is `server_stopped`; any answer, an error status
+// included, keeps `unreachable`. Re-creation keeps its backoff either way, and while the server is
+// known stopped a re-creation that cannot reach it keeps saying so.
 import {
   errorName,
   type Logger,
@@ -25,9 +32,11 @@ import type { TaggedEvent } from "./wire.js";
 export const RETRY_DELAYS_MS = [1000, 2000, 4000, 8000, 16000, 30000] as const;
 /** How long a panel's Zeo session must stay open before the backoff starts over. */
 export const STABLE_MS = 10_000;
+/** How long the origin probe of a lost stream waits for an answer before calling it stopped. */
+export const PROBE_TIMEOUT_MS = 2000;
 
 /** Why there is no usable panel right now. */
-export type LinkDown = "unreachable" | "too_many_panels";
+export type LinkDown = "unreachable" | "too_many_panels" | "server_stopped";
 
 export interface LinkHandlers {
   onEvent(event: TaggedEvent): void;
@@ -51,6 +60,11 @@ export class PanelLink {
   private stableTimer: ReturnType<typeof setTimeout> | undefined;
   private attempting = false;
   private closed = false;
+  /** The down state last reported, or `null` while a panel's stream is open. */
+  private down: LinkDown | null = null;
+  /** The origin probe in flight, if any. */
+  private probe: { controller: AbortController; timer: ReturnType<typeof setTimeout> } | null =
+    null;
 
   constructor(handlers: LinkHandlers, log: Logger) {
     this.handlers = handlers;
@@ -58,7 +72,12 @@ export class PanelLink {
     this.transport = new PanelTransport(
       {
         onEvent: (event) => handlers.onEvent(event),
-        onStreamOpen: () => handlers.onReady(),
+        onStreamOpen: () => {
+          // A panel is up: whatever an in-flight probe answers no longer matters.
+          this.cancelProbe();
+          this.down = null;
+          handlers.onReady();
+        },
         onStreamError: () => this.lost("stream"),
       },
       log,
@@ -93,8 +112,12 @@ export class PanelLink {
     this.log.info({ event: "panel_lost", cause, tries: this.tries });
     clearTimeout(this.stableTimer);
     this.stableTimer = undefined;
+    this.cancelProbe();
     this.transport.close();
-    this.handlers.onDown("unreachable");
+    this.setDown("unreachable");
+    if (cause === "stream") {
+      this.probeOrigin();
+    }
     this.schedule();
   }
 
@@ -117,13 +140,14 @@ export class PanelLink {
     }
     this.closed = false;
     this.tries = 0;
-    this.handlers.onDown("unreachable");
+    this.setDown("unreachable");
     void this.attempt();
   }
 
-  /** Ends the link: no stream, no further attempt, until `resume`. */
+  /** Ends the link: no stream, no further attempt and no probe, until `resume`. */
   close(): void {
     this.closed = true;
+    this.cancelProbe();
     clearTimeout(this.timer);
     this.timer = undefined;
     clearTimeout(this.stableTimer);
@@ -163,9 +187,74 @@ export class PanelLink {
       return;
     }
     if (!opened.ok) {
-      this.handlers.onDown(opened.error === "too_many_panels" ? "too_many_panels" : "unreachable");
+      this.setDown(downAfterFailedOpen(opened.error, this.down));
       this.schedule();
     }
     // On success the stream's own `open` calls `onReady`, and its failure calls `lost`.
   }
+
+  private setDown(reason: LinkDown): void {
+    this.down = reason;
+    this.handlers.onDown(reason);
+  }
+
+  /**
+   * Asks the page's own origin whether it still answers, once per lost stream. Only a probe that
+   * is still current when it settles applies: `close`, a newer loss and an opened stream all
+   * cancel it, so a page in the back/forward cache never probes and a late answer never
+   * overrides a panel that came back.
+   */
+  private probeOrigin(): void {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), PROBE_TIMEOUT_MS);
+    const probe = { controller, timer };
+    this.probe = probe;
+    void originAnswers(controller.signal).then((answered) => {
+      if (this.probe !== probe) {
+        return;
+      }
+      this.probe = null;
+      clearTimeout(timer);
+      this.log.info({ event: "panel_origin_probe", answered });
+      if (!answered) {
+        this.setDown("server_stopped");
+      }
+    });
+  }
+
+  private cancelProbe(): void {
+    const probe = this.probe;
+    this.probe = null;
+    if (probe !== null) {
+      clearTimeout(probe.timer);
+      probe.controller.abort();
+    }
+  }
+}
+
+/**
+ * The down state after `POST /api/panels` failed. A network failure while the server is already
+ * known stopped is more of the same; anything else is today's `unreachable`, except the cap.
+ */
+function downAfterFailedOpen(error: string, current: LinkDown | null): LinkDown {
+  if (error === "too_many_panels") {
+    return "too_many_panels";
+  }
+  return error === "network" && current === "server_stopped" ? "server_stopped" : "unreachable";
+}
+
+/**
+ * Whether the panel server answers `GET /api/config` at all. Any HTTP status is an answer — a 503
+ * still means the server is up (R3.9); only a network error or an abort (the timeout) is not.
+ */
+async function originAnswers(signal: AbortSignal): Promise<boolean> {
+  let res: Response;
+  try {
+    res = await globalThis.fetch("/api/config", { cache: "no-store", signal });
+  } catch {
+    return false;
+  }
+  // Nothing in the body is needed; release the connection.
+  void res.body?.cancel().catch(() => undefined);
+  return true;
 }
