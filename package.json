@@ -31,10 +31,10 @@
     "provenance": true
   },
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
+    "build": "tsc -p tsconfig.build.json && node scripts/build-panel.mjs",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint src test e2e",
-    "format:check": "prettier --check src test e2e",
+    "lint": "eslint src test e2e scripts",
+    "format:check": "prettier --check src test e2e scripts",
     "test": "vitest run",
     "e2e": "playwright test",
     "prepack": "npm run build"
@@ -61,9 +61,11 @@
     "@types/node": "^26.6.4",
     "@vitejs/plugin-react": "^6.1.1",
     "astro": "7.3.8",
+    "esbuild": "^0.28.2",
     "eslint": "^10.11.0",
     "globals": "^17.13.0",
     "happy-dom": "^20.14.5",
+    "markdown-it": "^15.0.2",
     "prettier": "^3.9.9",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",

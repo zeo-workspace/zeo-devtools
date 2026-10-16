@@ -31,6 +31,11 @@ export default tseslint.config(
     },
   },
   {
+    // Build scripts run under Node.
+    files: ["scripts/**/*.mjs"],
+    languageOptions: { ecmaVersion: 2024, sourceType: "module", globals: { ...globals.node } },
+  },
+  {
     // Tests strip ANSI colour codes from captured logs, which needs a control character in a regex.
     files: ["test/**/*.ts", "e2e/**/*.ts"],
     rules: { "no-control-regex": "off" },

@@ -85,12 +85,22 @@ export function viteAtLeast(found: string, required: string): boolean {
   return true;
 }
 
-/** The picker module next to this file: `.js` once built, `.ts` when run from source. */
-function clientEntry(): string {
+/** A client module next to this file: `.js` once built, `.ts` when run from source. */
+function clientModule(name: "index" | "bridge"): string {
   const here = dirname(fileURLToPath(import.meta.url));
-  const built = resolvePath(here, "client/index.js");
-  return existsSync(built) ? built : resolvePath(here, "client/index.ts");
+  const built = resolvePath(here, `client/${name}.js`);
+  return existsSync(built) ? built : resolvePath(here, `client/${name}.ts`);
 }
+
+/** The picker module. */
+const clientEntry = (): string => clientModule("index");
+
+/**
+ * How long the client module waits for the panel to start before it is served without the app
+ * bridge. The panel starts as soon as the server listens, so this bounds only a panel that never
+ * starts; a page is never held longer than this.
+ */
+const PANEL_ORIGIN_WAIT_MS = 5_000;
 
 /** Decoded bytes of a base64 string, for the log line (the bytes themselves are never logged). */
 const decodedBytes = (b64: string) =>
@@ -204,6 +214,8 @@ async function resolvedLocalUrl(
 function wirePanel(
   server: ViteDevServer,
   options: { panelPort?: number; socketPath?: string },
+  /** Told the panel's URL once it runs, or `undefined` when it will not run. */
+  onPanel: (url: string | undefined) => void,
 ): void {
   const vite = server.config.logger;
   // Vite's logger, so session and panel lines land in the dev server's own output.
@@ -218,6 +230,7 @@ function wirePanel(
       "zeo-devtools event=panel_disabled reason=middleware_mode " +
         `hint=${logValue("the devtools panel needs Vite's own HTTP server (server.middlewareMode is set)")}`,
     );
+    onPanel(undefined);
     return;
   }
 
@@ -301,7 +314,10 @@ function wirePanel(
 
   httpServer.once("listening", () => {
     // `start` logs every failure itself and never rejects.
-    starting ??= start();
+    if (starting === undefined) {
+      starting = start();
+      void starting.then((panel) => onPanel(panel?.url));
+    }
   });
   // A restart closes the old HTTP server without calling `server.close` (R3.7).
   httpServer.once("close", () => void stop());
@@ -474,6 +490,11 @@ export function zeo(options?: ZeoPluginOptions): Plugin[] {
     shortcut: opts?.shortcut,
     screenshot: opts?.screenshot,
   };
+  /**
+   * The panel page's origin, once this server's panel runs; `undefined` when it does not. The
+   * client module waits for it, so the app bridge posts to the panel's origin only.
+   */
+  let panelOrigin: Promise<string | undefined> = Promise.resolve(undefined);
   let relayEnabled = false;
 
   const relay: Plugin = {
@@ -494,14 +515,29 @@ export function zeo(options?: ZeoPluginOptions): Plugin[] {
     resolveId(id) {
       return relayEnabled && id === CLIENT_URL ? CLIENT_ID : null;
     },
-    load(id) {
+    async load(id) {
       if (id !== CLIENT_ID) {
         return null;
       }
-      return [
+      const lines = [
         `import { mount } from ${JSON.stringify(clientEntry())};`,
         `mount(${JSON.stringify(clientOptions)});`,
-      ].join("\n");
+      ];
+      // Story 055: the app bridge (design.md §A4), only when a panel runs, and told its origin.
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const origin = await Promise.race([
+        panelOrigin,
+        new Promise<undefined>((resolve) => {
+          timer = setTimeout(() => resolve(undefined), PANEL_ORIGIN_WAIT_MS);
+        }),
+      ]).finally(() => clearTimeout(timer));
+      if (origin !== undefined) {
+        lines.push(
+          `import { startBridge } from ${JSON.stringify(clientModule("bridge"))};`,
+          `startBridge(${JSON.stringify({ panelOrigin: origin })});`,
+        );
+      }
+      return lines.join("\n");
     },
     transformIndexHtml() {
       if (!relayEnabled) {
@@ -526,7 +562,13 @@ export function zeo(options?: ZeoPluginOptions): Plugin[] {
       // a second copy starts nothing. Never in Vitest's mode (R2.6); `apply: "serve"` already
       // keeps all of it out of `vite build`.
       if (opts?.panel !== false && server.config.mode !== "test") {
-        wirePanel(server, { panelPort: opts?.panelPort, socketPath: opts?.socketPath });
+        let tell: (url: string | undefined) => void = () => {};
+        panelOrigin = new Promise((resolve) => {
+          tell = (url) => resolve(url === undefined ? undefined : new URL(url).origin);
+        });
+        wirePanel(server, { panelPort: opts?.panelPort, socketPath: opts?.socketPath }, tell);
+      } else {
+        panelOrigin = Promise.resolve(undefined);
       }
       if (!relayEnabled) {
         logger.warn(

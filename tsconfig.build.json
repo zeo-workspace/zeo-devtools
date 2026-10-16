@@ -9,5 +9,5 @@
     "sourceMap": true
   },
   "include": ["src/**/*.ts"],
-  "exclude": ["node_modules", "dist", "test", "e2e"]
+  "exclude": ["node_modules", "dist", "test", "e2e", "src/panel"]
 }
